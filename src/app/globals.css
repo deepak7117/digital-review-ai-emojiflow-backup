@@ -1,0 +1,147 @@
+@import "tailwindcss";
+
+/*
+ * BD Clarity — design tokens
+ * Ink/paper base with a single "brand" accent (Banao Digital copper-
+ * orange, per the official brand reference), and a warm gold reserved
+ * strictly for star-rating iconography so it never gets diluted into a
+ * generic accent color.
+ *
+ * Design-only change: the underlying CSS variable/Tailwind class name
+ * ("verified") is kept as-is rather than renamed to "brand" — renaming
+ * would require touching ~50 component files' worth of Tailwind classes
+ * for a purely cosmetic reason, which is a larger blast radius than this
+ * design pass calls for. Only the color VALUES change here; every
+ * bg-verified/text-verified/border-verified usage throughout the app
+ * automatically picks up the new Banao Digital orange with zero other
+ * files touched.
+ */
+:root {
+  --color-paper: #faf7f2;
+  --color-paper-raised: #ffffff;
+  --color-ink: #14213d;
+  --color-ink-soft: #384057;
+  --color-slate: #5b6472;
+  --color-border: #e6e1d8;
+  --color-border-strong: #d6cfc1;
+  --color-verified: #c1611e;
+  --color-verified-dark: #9c4e18;
+  --color-verified-tint: #fbeee2;
+  --color-gold: #c08a2e;
+  --color-gold-tint: #f8eedb;
+  --color-danger: #b3432b;
+  --color-danger-tint: #f8e9e4;
+
+  /* Premium accent gradient — used sparingly (hero/login/greeting
+     moments only), per "gradients only where they genuinely improve the
+     design," never as a default button/card background. */
+  --gradient-brand: linear-gradient(135deg, #c1611e 0%, #e2934f 100%);
+  /* Soft, deep canvas wash for full-page backgrounds (auth, public
+     feedback) — gives a page body intentional depth instead of flat
+     white, without being a loud "gradient background." Always sits
+     behind paper-raised cards, never behind them competing for
+     attention. */
+  --gradient-canvas: radial-gradient(ellipse 120% 80% at 50% -10%, #fdf2e7 0%, #faf7f2 55%);
+
+  /* Premium, warm-tinted shadow scale — deliberately not pure black, so
+     elevation reads as soft/premium rather than a generic UI-kit drop
+     shadow. Tailwind v4 exposes these as shadow-xs/sm/md/lg/premium
+     utilities via the @theme block below. */
+  --shadow-color: 20 15 10;
+  --shadow-xs: 0 1px 2px rgb(var(--shadow-color) / 0.04);
+  --shadow-sm: 0 1px 3px rgb(var(--shadow-color) / 0.06), 0 1px 2px rgb(var(--shadow-color) / 0.04);
+  --shadow-md: 0 4px 10px rgb(var(--shadow-color) / 0.07), 0 2px 4px rgb(var(--shadow-color) / 0.05);
+  --shadow-lg: 0 12px 28px rgb(var(--shadow-color) / 0.10), 0 4px 10px rgb(var(--shadow-color) / 0.06);
+  /* A touch of brand color in the shadow — reserved for the primary
+     button's hover state and the single most important CTA per screen,
+     never for ordinary cards. */
+  --shadow-premium: 0 8px 20px rgb(193 97 30 / 0.18), 0 2px 6px rgb(193 97 30 / 0.12);
+
+  /* 12-16px radius system, per the approved visual direction. */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+@theme inline {
+  --color-paper: var(--color-paper);
+  --color-paper-raised: var(--color-paper-raised);
+  --color-ink: var(--color-ink);
+  --color-ink-soft: var(--color-ink-soft);
+  --color-slate: var(--color-slate);
+  --color-border: var(--color-border);
+  --color-border-strong: var(--color-border-strong);
+  --color-verified: var(--color-verified);
+  --color-verified-dark: var(--color-verified-dark);
+  --color-verified-tint: var(--color-verified-tint);
+  --color-gold: var(--color-gold);
+  --color-gold-tint: var(--color-gold-tint);
+  --color-danger: var(--color-danger);
+  --color-danger-tint: var(--color-danger-tint);
+
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --font-mono: var(--font-mono);
+
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-premium: var(--shadow-premium);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+}
+
+/* Full-page canvas wash — applied via a utility class (bg-canvas) rather
+   than redefining --color-paper itself, so existing bg-paper usages
+   (cards, inputs, etc.) are completely unaffected; only page-level
+   containers that opt in get the warmer, deeper backdrop. */
+.bg-canvas {
+  background-image: var(--gradient-canvas);
+  background-color: var(--color-paper);
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+}
+
+::selection {
+  background: var(--color-verified);
+  color: var(--color-paper-raised);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-verified);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
