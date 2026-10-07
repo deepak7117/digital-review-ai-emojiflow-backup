@@ -54,6 +54,32 @@ export interface Database {
       };
     };
     Functions: {
+      admin_grant_role: {
+        Args: { p_email: string; p_role: AdminRole };
+        Returns: string;
+      };
+      admin_revoke_role: {
+        Args: { p_user_id: string };
+        Returns: string;
+      };
+      admin_update_business: {
+        Args: {
+          p_business_id: string;
+          p_business_name: string;
+          p_category: string | null;
+          p_phone: string | null;
+          p_email: string | null;
+          p_address: string | null;
+          p_city: string | null;
+          p_website: string | null;
+          p_google_review_url: string | null;
+        };
+        Returns: string;
+      };
+      admin_delete_business: {
+        Args: { p_business_id: string; p_reason: string | null };
+        Returns: string;
+      };
       check_rate_limit: {
         Args: {
           p_scope: string;

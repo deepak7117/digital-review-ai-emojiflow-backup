@@ -1,6 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+/** The only URL of the separate admin login page. */
+const ADMIN_LOGIN_PATH = "/admin/0718/login/7117";
+
 /**
  * Refreshes the Supabase auth session on every request and enforces
  * route protection for /dashboard and /admin.
@@ -48,10 +51,19 @@ export async function updateSession(request: NextRequest) {
   // users away (like other auth routes) would block them from ever setting
   // a new password.
 
-  if (!user && isProtectedRoute) {
+  // The separate admin login page must be reachable while signed out.
+  const isAdminLoginRoute = path === ADMIN_LOGIN_PATH || path === `${ADMIN_LOGIN_PATH}/`;
+
+  if (!user && isProtectedRoute && !isAdminLoginRoute) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/login";
-    redirectUrl.searchParams.set("redirectTo", path);
+    if (path.startsWith("/admin")) {
+      // Don't reveal the admin login URL — send signed-out visitors of
+      // /admin/* to the normal login without a redirectTo hint.
+      redirectUrl.search = "";
+    } else {
+      redirectUrl.searchParams.set("redirectTo", path);
+    }
     return NextResponse.redirect(redirectUrl);
   }
 

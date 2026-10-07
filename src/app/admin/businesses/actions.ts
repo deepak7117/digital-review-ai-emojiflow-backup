@@ -64,6 +64,7 @@ export interface AdminBusinessDetail extends AdminBusinessSummary {
   phone: string | null;
   address: string | null;
   website: string | null;
+  contactEmail: string | null;
   googleReviewUrl: string | null;
   industrySlug: string | null;
   segmentSlug: string | null;
@@ -80,7 +81,7 @@ export async function getBusinessDetail(
   const { data: business, error } = await supabase
     .from("businesses")
     .select(
-      "id, business_name, category, city, phone, address, website, google_review_url, industry_slug, segment_slug, status, created_at, owner_id"
+      "id, business_name, category, city, phone, email, address, website, google_review_url, industry_slug, segment_slug, status, created_at, owner_id"
     )
     .eq("id", businessId)
     .maybeSingle();
@@ -103,6 +104,7 @@ export async function getBusinessDetail(
       phone: business.phone,
       address: business.address,
       website: business.website,
+      contactEmail: business.email,
       googleReviewUrl: business.google_review_url,
       industrySlug: business.industry_slug,
       segmentSlug: business.segment_slug,
@@ -153,6 +155,76 @@ export async function setBusinessStatus(
   if (error) return { error: error.message };
 
   revalidatePath(`/admin/businesses/${businessId}`);
+  revalidatePath("/admin/businesses");
+  return { ok: true };
+}
+
+export interface BusinessEditInput {
+  businessName: string;
+  category: string;
+  phone: string;
+  email: string;
+  address: string;
+  city: string;
+  website: string;
+  googleReviewUrl: string;
+}
+
+/** Edit business profile fields — Super Admin and Operations Admin. */
+export async function updateBusinessDetails(
+  businessId: unknown,
+  input: BusinessEditInput
+): Promise<{ ok: true } | { error: string }> {
+  const admin = await getCurrentAdmin();
+  if (!admin) return { error: "Not authorized." };
+  if (!hasCapability(admin.role, "edit_business_details")) {
+    return { error: "Your admin role cannot edit business details." };
+  }
+  if (typeof businessId !== "string" || !businessId) return { error: "Invalid business." };
+  if (!input || typeof input.businessName !== "string" || !input.businessName.trim()) {
+    return { error: "Business name is required." };
+  }
+  const clean = (v: unknown, max = 300) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_update_business", {
+    p_business_id: businessId,
+    p_business_name: clean(input.businessName, 200),
+    p_category: clean(input.category),
+    p_phone: clean(input.phone, 50),
+    p_email: clean(input.email),
+    p_address: clean(input.address, 500),
+    p_city: clean(input.city),
+    p_website: clean(input.website, 500),
+    p_google_review_url: clean(input.googleReviewUrl, 1000),
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath(`/admin/businesses/${businessId}`);
+  revalidatePath("/admin/businesses");
+  return { ok: true };
+}
+
+/** Permanently delete a business — Super Admin only. */
+export async function deleteBusiness(
+  businessId: unknown,
+  reason: unknown
+): Promise<{ ok: true } | { error: string }> {
+  const admin = await getCurrentAdmin();
+  if (!admin) return { error: "Not authorized." };
+  if (!hasCapability(admin.role, "delete_business")) {
+    return { error: "Only Super Admin can delete a business." };
+  }
+  if (typeof businessId !== "string" || !businessId) return { error: "Invalid business." };
+  const reasonText = typeof reason === "string" ? reason.trim().slice(0, 500) : null;
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_delete_business", {
+    p_business_id: businessId,
+    p_reason: reasonText,
+  });
+  if (error) return { error: error.message };
+
   revalidatePath("/admin/businesses");
   return { ok: true };
 }

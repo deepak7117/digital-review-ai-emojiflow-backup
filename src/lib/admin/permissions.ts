@@ -36,7 +36,10 @@ export type AdminCapability =
   | "support_access_sessions"
   | "manage_support_notes"
   | "manage_admin_roles"
-  | "manage_platform_settings";
+  | "manage_platform_settings"
+  | "edit_business_details"
+  | "delete_business"
+  | "view_all_users";
 
 /**
  * The approved permission matrix. Kept as one explicit table (not
@@ -52,6 +55,9 @@ const PERMISSION_MATRIX: Record<AdminRole, Set<AdminCapability>> = {
     "manage_support_notes",
     "manage_admin_roles",
     "manage_platform_settings",
+    "edit_business_details",
+    "delete_business",
+    "view_all_users",
   ]),
   operations_admin: new Set([
     "view_dashboard",
@@ -59,6 +65,8 @@ const PERMISSION_MATRIX: Record<AdminRole, Set<AdminCapability>> = {
     "manage_branches",
     "support_access_sessions",
     "manage_support_notes",
+    "edit_business_details",
+    "view_all_users",
   ]),
   support_admin: new Set(["view_dashboard", "support_access_sessions", "manage_support_notes"]),
   read_only_analyst: new Set(["view_dashboard"]),
