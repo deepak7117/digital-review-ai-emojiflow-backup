@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentAdmin, ADMIN_ROLE_LABELS } from "@/lib/admin/permissions";
+import { getPlatformSettings } from "@/app/admin/platformSettingsActions";
+import { MultiStoreSettingsPanel } from "@/components/admin/MultiStoreSettingsPanel";
 
 /**
  * Milestone 1: a real dashboard reading only real, already-existing
@@ -26,6 +28,7 @@ export default async function AdminDashboardPage() {
     totalQrLinks,
     totalFeedback,
     recentAuditLogs,
+    platformSettings,
   ] = await Promise.all([
     supabase.from("businesses").select("id", { count: "exact", head: true }),
     supabase.from("businesses").select("status"),
@@ -44,6 +47,7 @@ export default async function AdminDashboardPage() {
       .select("action, target_type, result, created_at, admin_user_id")
       .order("created_at", { ascending: false })
       .limit(10),
+    getPlatformSettings(),
   ]);
 
   const statusBreakdown = { active: 0, inactive: 0, suspended: 0 };
@@ -51,15 +55,29 @@ export default async function AdminDashboardPage() {
     statusBreakdown[row.status] = (statusBreakdown[row.status] ?? 0) + 1;
   }
 
+  /**
+   * Semantic KPI coloring, per the approved visual identity:
+   * ACTIVE -> Emerald, SUSPENDED -> Red, NEW -> Indigo, QR/feedback
+   * activity -> Teal. "Total" and "Inactive" carry no status meaning of
+   * their own, so they stay neutral rather than being colored just to
+   * fill the grid.
+   */
+  const statTone: Record<string, string> = {
+    text_slate: "text-ink",
+    text_success: "text-success-dark",
+    text_danger: "text-danger",
+    text_verified: "text-verified-dark",
+    text_voice: "text-voice-dark",
+  };
   const stats = [
-    { label: "Total businesses", value: totalBusinesses.count ?? 0 },
-    { label: "Active", value: statusBreakdown.active },
-    { label: "Inactive", value: statusBreakdown.inactive },
-    { label: "Suspended", value: statusBreakdown.suspended },
-    { label: "New (7 days)", value: newLast7d.count ?? 0 },
-    { label: "New (30 days)", value: newLast30d.count ?? 0 },
-    { label: "QR mappings", value: totalQrLinks.count ?? 0 },
-    { label: "Feedback submissions", value: totalFeedback.count ?? 0 },
+    { label: "Total businesses", value: totalBusinesses.count ?? 0, tone: "text_slate" },
+    { label: "Active", value: statusBreakdown.active, tone: "text_success" },
+    { label: "Inactive", value: statusBreakdown.inactive, tone: "text_slate" },
+    { label: "Suspended", value: statusBreakdown.suspended, tone: "text_danger" },
+    { label: "New (7 days)", value: newLast7d.count ?? 0, tone: "text_verified" },
+    { label: "New (30 days)", value: newLast30d.count ?? 0, tone: "text_verified" },
+    { label: "QR mappings", value: totalQrLinks.count ?? 0, tone: "text_voice" },
+    { label: "Feedback submissions", value: totalFeedback.count ?? 0, tone: "text_voice" },
   ];
 
   return (
@@ -75,7 +93,7 @@ export default async function AdminDashboardPage() {
         {stats.map((item) => (
           <div key={item.label} className="rounded-[var(--radius-md)] border border-border-strong bg-paper-raised p-5 shadow-xs">
             <p className="font-mono text-[10px] uppercase tracking-wider text-slate">{item.label}</p>
-            <p className="mt-2 font-display text-2xl font-semibold text-ink">{item.value}</p>
+            <p className={`mt-2 font-display text-2xl font-semibold ${statTone[item.tone]}`}>{item.value}</p>
           </div>
         ))}
       </div>
@@ -104,7 +122,7 @@ export default async function AdminDashboardPage() {
                 {log.target_type && <span className="text-slate"> · {log.target_type}</span>}
                 <span
                   className={`ml-2 font-mono text-[10px] uppercase tracking-wider ${
-                    log.result === "success" ? "text-verified" : "text-danger"
+                    log.result === "success" ? "text-success-dark" : "text-danger"
                   }`}
                 >
                   {log.result}
@@ -123,10 +141,17 @@ export default async function AdminDashboardPage() {
         )}
       </div>
 
+      {platformSettings && (
+        <MultiStoreSettingsPanel
+          initialEnabled={platformSettings.multistoreEnabled}
+          initialMax={platformSettings.maxBusinessesPerOwner}
+          canEdit={admin?.role === "super_admin"}
+        />
+      )}
+
       <div className="rounded-[var(--radius-md)] border border-dashed border-border-strong bg-ink/[0.015] p-6 text-sm text-slate">
         Business account management, branch management, QR mapping tools, AI usage
-        monitoring, admin team management, and platform settings ship in Milestones
-        2–7.{" "}
+        monitoring, and admin team management ship in Milestones 2–7.{" "}
         <Link href="/dashboard" className="text-verified hover:underline">
           Back to dashboard
         </Link>

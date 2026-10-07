@@ -8,6 +8,7 @@ import { computeDemandSignals } from "@/lib/insights/demandDetector";
 import { computeFeedbackAnalytics } from "@/lib/analytics/computeFeedbackAnalytics";
 import { computeExperienceScore } from "@/lib/insights/experienceScore";
 import { buildRecommendedActions } from "@/lib/insights/businessAdvisor";
+import { getActiveBusiness } from "@/lib/business/activeBusiness";
 import { isCustomerBrainAiConfigured } from "@/lib/ai/customerVoiceEnhancer";
 import { MIN_SAMPLE_SIZE } from "@/lib/insights/types";
 import { PeriodSelector } from "@/components/dashboard/intelligence/PeriodSelector";
@@ -38,11 +39,7 @@ export default async function CustomerIntelligencePage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id, business_name, industry_slug, segment_slug")
-    .eq("owner_id", user.id)
-    .maybeSingle();
+  const { business } = await getActiveBusiness(supabase);
 
   if (!business) {
     return (

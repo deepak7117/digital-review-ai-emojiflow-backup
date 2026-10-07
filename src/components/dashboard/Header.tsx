@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Logo } from "@/components/ui/Logo";
 
@@ -10,16 +11,52 @@ export function DashboardHeader({
   businessName,
   email,
   unreadNotificationCount = 0,
+  switcher,
 }: {
   businessName: string | null;
   email: string;
   /** Owner-facing count of unread negative-feedback alerts. Defaults to 0 so existing call sites that don't pass it keep working unchanged. */
   unreadNotificationCount?: number;
+  /** The Business Switcher (Multi-Store milestone) — optional so any other caller of this header keeps working unchanged; falls back to the plain business-name pill when omitted. */
+  switcher?: ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const supabase = createClient();
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [lastPathname, setLastPathname] = useState(pathname);
+
+  // This header lives in the persistent dashboard layout (not remounted
+  // when only the page changes), so without this, opening the menu and
+  // then navigating via the sidebar/bottom nav would leave it rendered
+  // open on top of the new page — a real, confirmed bug, not a
+  // hypothetical one. Deliberately NOT a useEffect: React's own guidance
+  // for "reset state when a prop/derived value changes" is to compare
+  // during render and call the state setter directly, which avoids an
+  // extra unconditional render pass after every navigation (and avoids
+  // this project's react-hooks/set-state-in-effect lint rule, which
+  // correctly flags the naive useEffect(() => setOpen(false), [pathname])
+  // version of this same fix as an anti-pattern).
+  if (pathname !== lastPathname) {
+    setLastPathname(pathname);
+    setOpen(false);
+  }
+
+  // Defense in depth alongside the pathname-close above: also closes on
+  // an outside click/tap, so the menu never lingers open if the owner
+  // dismisses it without navigating or without using Log out.
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(event: PointerEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [open]);
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -35,13 +72,20 @@ export function DashboardHeader({
       <div className="flex items-center justify-between px-6 py-3.5">
         <div className="flex items-center gap-4">
           <Logo href="/dashboard" compact />
-          {businessName && (
+          {switcher ? (
             <>
               <span className="hidden h-5 w-px bg-border-strong sm:block" aria-hidden="true" />
-              <span className="hidden rounded-full bg-ink/[0.04] px-3 py-1 text-xs font-medium text-ink-soft sm:inline">
-                {businessName}
-              </span>
+              {switcher}
             </>
+          ) : (
+            businessName && (
+              <>
+                <span className="hidden h-5 w-px bg-border-strong sm:block" aria-hidden="true" />
+                <span className="hidden rounded-full bg-ink/[0.04] px-3 py-1 text-xs font-medium text-ink-soft sm:inline">
+                  {businessName}
+                </span>
+              </>
+            )
           )}
         </div>
         <div className="flex items-center gap-3">
@@ -55,7 +99,7 @@ export function DashboardHeader({
               {unreadNotificationCount} new
             </Link>
           )}
-          <div className="relative">
+          <div className="relative" ref={menuRef}>
             <button
               onClick={() => setOpen((v) => !v)}
               className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold text-white shadow-sm transition-transform active:scale-95"

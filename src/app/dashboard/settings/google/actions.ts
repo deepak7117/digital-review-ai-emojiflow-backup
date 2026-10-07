@@ -12,6 +12,7 @@ import {
 import { listGoogleAccounts, listGoogleLocations, type GoogleAccount, type GoogleLocation } from "@/lib/google/businessProfileClient";
 import { encryptToken, decryptToken } from "@/lib/google/tokenCrypto";
 import { writeAuditLog } from "@/lib/admin/permissions";
+import { getActiveBusiness } from "@/lib/business/activeBusiness";
 
 /**
  * Every function below re-resolves the caller's OWN business server-side
@@ -28,13 +29,7 @@ async function getOwnedBusinessId(
   } = await supabase.auth.getUser();
   if (!user) return { error: "You need to be logged in." };
 
-  const { data: business, error } = await supabase
-    .from("businesses")
-    .select("id")
-    .eq("owner_id", user.id)
-    .maybeSingle();
-
-  if (error) return { error: error.message };
+  const { business } = await getActiveBusiness(supabase);
   if (!business) return { error: "Set up your business profile first." };
 
   return { businessId: business.id, userId: user.id };

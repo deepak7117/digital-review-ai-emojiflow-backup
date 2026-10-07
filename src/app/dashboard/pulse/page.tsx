@@ -5,6 +5,7 @@ import { Alert } from "@/components/ui/Alert";
 import { PulseManager } from "@/components/dashboard/pulse/PulseManager";
 import type { PollWithResults } from "@/app/dashboard/pulse/actions";
 import { getSegmentConfig, generateSegmentPulseQuestions } from "@/lib/segments/engine";
+import { getActiveBusiness } from "@/lib/business/activeBusiness";
 
 const RESPONSE_SCAN_LIMIT = 5000;
 
@@ -15,11 +16,7 @@ export default async function CustomerPulsePage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id, business_name, industry_slug, segment_slug")
-    .eq("owner_id", user.id)
-    .maybeSingle();
+  const { business } = await getActiveBusiness(supabase);
 
   if (!business) {
     return (

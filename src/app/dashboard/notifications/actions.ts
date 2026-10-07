@@ -1,22 +1,12 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getActiveBusinessId } from "@/lib/business/activeBusiness";
 
 async function getOwnedBusinessId(
   supabase: Awaited<ReturnType<typeof createClient>>
 ): Promise<string | null> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id")
-    .eq("owner_id", user.id)
-    .maybeSingle();
-
-  return business?.id ?? null;
+  return getActiveBusinessId(supabase);
 }
 
 /**

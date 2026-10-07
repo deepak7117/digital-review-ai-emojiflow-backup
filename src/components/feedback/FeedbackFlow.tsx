@@ -29,11 +29,17 @@ const EMOJI_OPTIONS: EmojiOption[] = [
   { rating: 5, emoji: "🤩", label: "Absolutely loved it!" },
 ];
 
-/** Sentiment-matched glow for the selected emoji — never a loud, cartoonish color; always one of the existing brand/semantic tokens. */
+/**
+ * Sentiment-matched glow for the selected emoji — never a loud,
+ * cartoonish color; always one of the semantic tokens. The emoji
+ * represents the CUSTOMER's own feeling, not BD Clarity's AI, so a
+ * positive rating glows Emerald/success — not Indigo, which is reserved
+ * for BD Clarity's own intelligence, shown next on the generating step.
+ */
 function glowForRating(rating: number): string {
   if (rating <= 1) return "rgb(179 67 43 / 0.16)"; // --color-danger
   if (rating <= 3) return "rgb(192 138 46 / 0.16)"; // --color-gold
-  return "rgb(193 97 30 / 0.18)"; // --color-verified (brand orange)
+  return "rgb(22 145 95 / 0.16)"; // --color-success (Emerald)
 }
 
 export interface FeedbackContextQuestion {
@@ -220,40 +226,72 @@ export function FeedbackFlow({ code, businessName, category, city, logoUrl, tags
       )}
 
       {step === "generating" && (
-        <div className="rounded-[var(--radius-lg)] border border-border-strong bg-paper-raised p-7 shadow-lg text-center">
-          <p className="font-display text-lg font-semibold text-ink">✨ Making your review ready…</p>
-          <div className="mt-5 flex justify-center">
+        <div className="relative overflow-hidden rounded-[var(--radius-lg)] border border-verified/20 bg-paper-raised p-7 text-center shadow-lg">
+          <div
+            className="pointer-events-none absolute inset-0 opacity-[0.06]"
+            style={{ background: "var(--gradient-brand)" }}
+            aria-hidden="true"
+          />
+          <div className="relative flex justify-center">
             <span
-              className="h-6 w-6 animate-spin rounded-full border-2 border-verified border-t-transparent"
+              className="h-9 w-9 animate-spin rounded-full border-2 border-verified border-t-transparent"
               aria-hidden="true"
             />
           </div>
+          <p className="relative mt-4 font-display text-lg font-semibold text-ink">
+            Understanding your experience…
+          </p>
+          <p className="relative mt-1 text-sm text-verified-dark">
+            BD Clarity is reading between the lines ✨
+          </p>
         </div>
       )}
 
       {step === "ready" && !savedWithNoGoogleUrl && (
-        <div className="rounded-[var(--radius-lg)] border border-border-strong bg-paper-raised p-7 shadow-lg">
-          <p className="text-center font-display text-lg font-semibold text-ink">
-            Your review is ready ✨
+        <div className="relative overflow-hidden rounded-[var(--radius-lg)] border border-verified/20 bg-paper-raised p-7 shadow-lg">
+          {/* A restrained top accent, not a full gradient card — "AI result
+              highlight" per the gradient rule, applied once, not everywhere. */}
+          <div
+            className="absolute inset-x-0 top-0 h-1"
+            style={{ background: "var(--gradient-brand)" }}
+            aria-hidden="true"
+          />
+
+          <div className="flex items-center justify-center gap-1.5 text-xs font-medium text-verified-dark">
+            <span aria-hidden="true">✨</span>
+            BD Clarity understood your experience
+          </div>
+          <p className="mt-1.5 text-center font-display text-xl font-semibold tracking-tight text-ink">
+            Your review is ready
           </p>
 
-          <div className="mt-4 flex flex-col gap-1.5 text-sm text-verified-dark">
-            <span>✓ Personalized</span>
+          <div className="mt-4 flex flex-col gap-1.5 text-sm text-success-dark">
+            <span>✓ Personalized to what you shared</span>
             <span>✓ Ready for Google</span>
             {copied ? (
               <span>✓ Copied</span>
             ) : (
-              <button type="button" onClick={manualCopy} className="w-fit text-left underline">
+              <button
+                type="button"
+                onClick={manualCopy}
+                className="w-fit text-left text-verified-dark underline"
+              >
                 Tap to copy your review
               </button>
             )}
           </div>
 
-          <div className="mt-4 rounded-[var(--radius-md)] border border-border-strong bg-paper p-4 text-sm text-ink">
+          <div className="mt-4 rounded-[var(--radius-md)] border border-verified/15 bg-verified-tint/40 p-4 text-sm leading-relaxed text-ink">
             {draft}
           </div>
 
-          <Button onClick={continueToGoogle} loading={isPending} className="mt-5 w-full" size="lg">
+          <Button
+            onClick={continueToGoogle}
+            loading={isPending}
+            className="mt-5 w-full shadow-premium"
+            size="lg"
+            style={{ background: "var(--gradient-brand)" }}
+          >
             Continue to Google →
           </Button>
           <p className="mt-2 text-center text-xs text-slate">
@@ -263,11 +301,11 @@ export function FeedbackFlow({ code, businessName, category, city, logoUrl, tags
       )}
 
       {step === "ready" && savedWithNoGoogleUrl && (
-        <div className="rounded-[var(--radius-lg)] border border-verified/25 bg-verified-tint p-7 text-center shadow-lg">
-          <p className="font-display text-lg font-semibold text-verified-dark">
+        <div className="rounded-[var(--radius-lg)] border border-success/25 bg-success-tint p-7 text-center shadow-lg">
+          <p className="font-display text-lg font-semibold text-success-dark">
             Your voice has been heard — thank you!
           </p>
-          <p className="mt-1.5 text-sm text-verified-dark">
+          <p className="mt-1.5 text-sm text-success-dark">
             Your feedback was sent directly to {businessName}.
           </p>
         </div>
@@ -306,9 +344,9 @@ export function FeedbackFlow({ code, businessName, category, city, logoUrl, tags
       )}
 
       {step === "recoveryThanks" && (
-        <div className="rounded-[var(--radius-lg)] border border-verified/25 bg-verified-tint p-7 text-center shadow-lg">
-          <p className="font-display text-lg font-semibold text-verified-dark">Thank you for telling us.</p>
-          <p className="mt-1.5 text-sm text-verified-dark">
+        <div className="rounded-[var(--radius-lg)] border border-success/25 bg-success-tint p-7 text-center shadow-lg">
+          <p className="font-display text-lg font-semibold text-success-dark">Thank you for telling us.</p>
+          <p className="mt-1.5 text-sm text-success-dark">
             Your feedback has been shared with the team at {businessName}.
           </p>
         </div>

@@ -4,6 +4,7 @@ import { BusinessProfileForm, type BusinessProfileData } from "@/components/dash
 import { isGooglePlacesConfigured } from "@/lib/google/placesLookup";
 import { ContextQuestionsEditor } from "@/components/dashboard/ContextQuestionsEditor";
 import { listContextQuestions } from "@/app/dashboard/profile/questionsActions";
+import { getActiveBusiness } from "@/lib/business/activeBusiness";
 
 export default async function BusinessProfilePage() {
   const supabase = await createClient();
@@ -13,13 +14,7 @@ export default async function BusinessProfilePage() {
 
   if (!user) redirect("/login");
 
-  const { data: business } = await supabase
-    .from("businesses")
-    .select(
-      "business_name, category, phone, email, address, city, website, google_review_url, industry_slug, segment_slug"
-    )
-    .eq("owner_id", user.id)
-    .maybeSingle();
+  const { business } = await getActiveBusiness(supabase);
 
   const initialData: BusinessProfileData | null = business
     ? {
@@ -49,6 +44,7 @@ export default async function BusinessProfilePage() {
         <BusinessProfileForm
           initialData={initialData}
           hasExistingRecord={!!business}
+          businessId={business?.id ?? null}
           googlePlacesConfigured={isGooglePlacesConfigured()}
         />
       </div>

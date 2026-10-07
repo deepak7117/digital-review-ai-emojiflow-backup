@@ -8,6 +8,7 @@ import {
   WeeklyTrendChart,
   TagBreakdownList,
 } from "@/components/dashboard/AnalyticsCharts";
+import { getActiveBusiness } from "@/lib/business/activeBusiness";
 
 // Caps how many rows we scan to compute analytics. Fine at Module 5 scale;
 // a high-volume business would eventually want a database-side aggregate
@@ -25,11 +26,7 @@ export default async function AnalyticsPage() {
 
   if (!user) redirect("/login");
 
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id, business_name")
-    .eq("owner_id", user.id)
-    .maybeSingle();
+  const { business } = await getActiveBusiness(supabase);
 
   if (!business) {
     return (

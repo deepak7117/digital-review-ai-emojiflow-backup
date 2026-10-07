@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { refreshAccessToken } from "@/lib/google/oauth";
 import { listReviews } from "@/lib/google/reviewsClient";
 import { encryptToken, decryptToken } from "@/lib/google/tokenCrypto";
+import { getActiveBusiness } from "@/lib/business/activeBusiness";
 
 // Note: audit logging was intentionally NOT added to this sync action.
 // The existing narrow owner audit policy (0011) permits only
@@ -27,12 +28,7 @@ async function getOwnedBusinessId(
   } = await supabase.auth.getUser();
   if (!user) return { error: "You need to be logged in." };
 
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id")
-    .eq("owner_id", user.id)
-    .maybeSingle();
-
+  const { business } = await getActiveBusiness(supabase);
   if (!business) return { error: "Set up your business profile first." };
   return { businessId: business.id, userId: user.id };
 }

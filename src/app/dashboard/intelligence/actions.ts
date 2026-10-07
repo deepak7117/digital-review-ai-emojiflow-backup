@@ -6,6 +6,7 @@ import {
   isCustomerBrainAiConfigured,
   generateAdvisorNarrative,
 } from "@/lib/ai/customerVoiceEnhancer";
+import { getActiveBusiness } from "@/lib/business/activeBusiness";
 import { getPeriodRange, isWithin } from "@/lib/insights/period";
 import { computeCustomerVoice, computeRepeatIntentSignal } from "@/lib/insights/customerVoice";
 import { computeDemandSignals } from "@/lib/insights/demandDetector";
@@ -22,13 +23,7 @@ async function getOwnedBusinessId(
 
   if (!user) return { error: "You need to be logged in." };
 
-  const { data: business, error } = await supabase
-    .from("businesses")
-    .select("id")
-    .eq("owner_id", user.id)
-    .maybeSingle();
-
-  if (error) return { error: error.message };
+  const { business } = await getActiveBusiness(supabase);
   if (!business) return { error: "Set up your business profile first." };
 
   return { businessId: business.id };

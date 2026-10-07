@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { getSegmentConfig } from "@/lib/segments/engine";
+import { getActiveBusiness } from "@/lib/business/activeBusiness";
 
 export interface ContextQuestion {
   id: string;
@@ -26,13 +27,7 @@ async function getOwnedBusiness(
   } = await supabase.auth.getUser();
   if (!user) return { error: "You need to be logged in." };
 
-  const { data: business, error } = await supabase
-    .from("businesses")
-    .select("id, industry_slug, segment_slug")
-    .eq("owner_id", user.id)
-    .maybeSingle();
-
-  if (error) return { error: error.message };
+  const { business } = await getActiveBusiness(supabase);
   if (!business) return { error: "Set up your business profile first." };
 
   return { businessId: business.id, industrySlug: business.industry_slug, segmentSlug: business.segment_slug };

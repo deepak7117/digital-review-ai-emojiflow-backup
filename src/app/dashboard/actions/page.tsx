@@ -8,6 +8,7 @@ import { buildRecommendedActions } from "@/lib/insights/businessAdvisor";
 import { PRIORITY_LABELS } from "@/lib/insights/priority";
 import { getSegmentConfig } from "@/lib/segments/engine";
 import { MIN_SAMPLE_SIZE } from "@/lib/insights/types";
+import { getActiveBusiness } from "@/lib/business/activeBusiness";
 import type { RecommendedAction, PriorityLevel } from "@/lib/insights/types";
 import { GettingStartedCard } from "@/components/dashboard/intelligence/GettingStartedCard";
 import { PriorityBadge } from "@/components/dashboard/intelligence/PriorityBadge";
@@ -147,11 +148,7 @@ export default async function CustomerActionsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id, business_name, industry_slug, segment_slug")
-    .eq("owner_id", user.id)
-    .maybeSingle();
+  const { business } = await getActiveBusiness(supabase);
 
   if (!business) redirect("/dashboard/profile");
 

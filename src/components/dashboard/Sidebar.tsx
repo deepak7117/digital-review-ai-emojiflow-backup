@@ -114,44 +114,22 @@ const navGroups: NavGroup[] = [
     label: "Workspace",
     items: [
       { href: "/dashboard/profile", label: "Business Profile", icon: "profile", enabled: true },
-      { href: "/dashboard/settings", label: "Settings", icon: "settings", enabled: false },
+      { href: "/dashboard/settings", label: "Settings", icon: "settings", enabled: true },
     ],
   },
 ];
-
-const flatNavItems = navGroups.flatMap((g) => g.items);
 
 export function Sidebar() {
   const pathname = usePathname();
 
   return (
     <>
-      {/* Mobile navigation — a horizontally-scrolling tab bar, shown only
-          below md. Reuses the exact same items as the desktop sidebar;
-          purely presentational, no new interactive/toggle state. */}
-      <nav
-        className="-mx-6 flex gap-1 overflow-x-auto border-b border-border px-6 py-2.5 md:hidden"
-        aria-label="Dashboard"
-      >
-        {flatNavItems
-          .filter((item) => item.enabled)
-          .map((item) => {
-            const active = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm transition-colors ${
-                  active ? "bg-verified text-white font-medium shadow-sm" : "text-ink-soft bg-ink/[0.03]"
-                }`}
-              >
-                <span className={active ? "text-white" : "text-slate"}>{icons[item.icon]}</span>
-                {item.label}
-              </Link>
-            );
-          })}
-      </nav>
-
+      {/* Mobile navigation is now the purpose-built MobileBottomNav
+          (src/components/dashboard/MobileBottomNav.tsx) — the
+          horizontally-scrolling tab bar that used to live here has been
+          removed rather than left to run alongside it, per "do not
+          simply shrink the existing desktop sidebar into mobile... the
+          mobile navigation should be purpose-designed." */}
       <nav className="hidden w-64 shrink-0 border-r border-border py-8 pr-5 md:block" aria-label="Dashboard">
         <div className="flex flex-col gap-6">
           {navGroups.map((group) => (

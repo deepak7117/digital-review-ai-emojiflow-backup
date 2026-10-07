@@ -8,6 +8,7 @@ import { encryptToken, decryptToken } from "@/lib/google/tokenCrypto";
 import { generateGoogleReplies } from "@/lib/reviewEngine/replyGenerator";
 import type { ReviewContext } from "@/lib/reviewEngine/types";
 import { getSegmentConfig } from "@/lib/segments/engine";
+import { getActiveBusiness } from "@/lib/business/activeBusiness";
 
 async function getOwnedBusiness(
   supabase: Awaited<ReturnType<typeof createClient>>
@@ -20,12 +21,7 @@ async function getOwnedBusiness(
   } = await supabase.auth.getUser();
   if (!user) return { error: "You need to be logged in." };
 
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id, business_name, industry_slug, segment_slug")
-    .eq("owner_id", user.id)
-    .maybeSingle();
-
+  const { business } = await getActiveBusiness(supabase);
   if (!business) return { error: "Set up your business profile first." };
   return {
     businessId: business.id,

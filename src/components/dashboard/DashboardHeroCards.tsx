@@ -12,10 +12,18 @@ import type { RecommendedAction } from "@/lib/insights/types";
  * "not enough data" states, never a fabricated figure.
  */
 
-type Tone = "verified" | "gold" | "danger" | "slate";
+/**
+ * verified = BD Clarity intelligence/AI (Indigo). success = positive
+ * sentiment/completed (Emerald) — deliberately separate from "verified"
+ * now, since a high score or positive trend is the CUSTOMER's outcome,
+ * not BD Clarity's own AI activity. voice = Customer Voice (Teal).
+ */
+type Tone = "verified" | "success" | "voice" | "gold" | "danger" | "slate";
 
 const TONE_CLASSES: Record<Tone, { border: string; bg: string; text: string }> = {
   verified: { border: "border-verified/25", bg: "bg-verified-tint", text: "text-verified-dark" },
+  success: { border: "border-success/25", bg: "bg-success-tint", text: "text-success-dark" },
+  voice: { border: "border-voice/25", bg: "bg-voice-tint", text: "text-voice-dark" },
   gold: { border: "border-gold/30", bg: "bg-gold-tint", text: "text-gold" },
   danger: { border: "border-danger/25", bg: "bg-danger-tint", text: "text-danger" },
   slate: { border: "border-border-strong", bg: "bg-paper-raised", text: "text-ink-soft" },
@@ -49,13 +57,13 @@ function HeroCard({
 }
 
 function scoreTone(score: number): Tone {
-  if (score >= 70) return "verified";
+  if (score >= 70) return "success";
   if (score >= 40) return "gold";
   return "danger";
 }
 
 function sentimentFromRating(avgRating: number): { label: string; emoji: string; tone: Tone } {
-  if (avgRating >= 4) return { label: "Positive", emoji: "😊", tone: "verified" };
+  if (avgRating >= 4) return { label: "Positive", emoji: "😊", tone: "success" };
   if (avgRating <= 2) return { label: "Needs improvement", emoji: "😟", tone: "danger" };
   return { label: "Mixed", emoji: "😐", tone: "gold" };
 }
@@ -69,7 +77,7 @@ function weeklyTrendDirection(weeklyTrend: FeedbackAnalytics["weeklyTrend"]): {
   if (len < 2) return { label: "Not enough data", arrow: "→", tone: "slate" };
   const last = weeklyTrend[len - 1].count;
   const prev = weeklyTrend[len - 2].count;
-  if (last > prev) return { label: `Up from ${prev} to ${last} this week`, arrow: "↑", tone: "verified" };
+  if (last > prev) return { label: `Up from ${prev} to ${last} this week`, arrow: "↑", tone: "success" };
   if (last < prev) return { label: `Down from ${prev} to ${last} this week`, arrow: "↓", tone: "gold" };
   return { label: `Steady at ${last} this week`, arrow: "→", tone: "slate" };
 }
@@ -100,7 +108,7 @@ export function DashboardHeroCards({
         <p className="text-lg font-semibold">{sentiment?.label ?? "Not enough data yet"}</p>
       </HeroCard>
 
-      <HeroCard emoji="💬" label="Customer Voice" tone="slate" href="/dashboard/feedback">
+      <HeroCard emoji="💬" label="Customer Voice" tone="voice" href="/dashboard/feedback">
         <p className="text-2xl font-semibold text-ink">{analytics.total}</p>
         <p className="text-xs text-slate">submissions in the last 30 days</p>
       </HeroCard>
@@ -108,7 +116,7 @@ export function DashboardHeroCards({
       <HeroCard
         emoji="⚠️"
         label="Needs Attention"
-        tone={topAction && topAction.priority === 1 ? "danger" : "slate"}
+        tone={!topAction ? "slate" : topAction.priority === 1 ? "danger" : "gold"}
         href="/dashboard/intelligence"
       >
         <p className="text-sm font-medium">
@@ -122,7 +130,7 @@ export function DashboardHeroCards({
         </p>
       </HeroCard>
 
-      <HeroCard emoji="💡" label="AI Recommendation" tone="slate" href="/dashboard/intelligence">
+      <HeroCard emoji="💡" label="AI Recommendation" tone="verified" href="/dashboard/intelligence">
         <p className="text-sm font-medium">
           {topAction ? topAction.recommendation ?? topAction.why : "No recommendations yet"}
         </p>

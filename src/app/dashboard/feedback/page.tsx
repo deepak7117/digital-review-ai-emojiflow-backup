@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Alert } from "@/components/ui/Alert";
 import { FeedbackList } from "@/components/dashboard/FeedbackList";
 import { markNotificationsRead } from "@/app/dashboard/notifications/actions";
+import { getActiveBusiness } from "@/lib/business/activeBusiness";
 
 const PAGE_SIZE = 50;
 // Caps how many rows we scan to build the rating-distribution strip. Fine
@@ -31,11 +32,7 @@ export default async function FeedbackInboxPage({
   // handling simple; it never throws, so it can't fail this page load).
   await markNotificationsRead();
 
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id, business_name")
-    .eq("owner_id", user.id)
-    .maybeSingle();
+  const { business } = await getActiveBusiness(supabase);
 
   if (!business) {
     return (

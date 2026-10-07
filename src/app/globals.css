@@ -1,47 +1,84 @@
 @import "tailwindcss";
 
 /*
- * BD Clarity — design tokens
- * Ink/paper base with a single "brand" accent (Banao Digital copper-
- * orange, per the official brand reference), and a warm gold reserved
- * strictly for star-rating iconography so it never gets diluted into a
- * generic accent color.
+ * BD Clarity — design tokens (Visual Identity Redesign)
  *
- * Design-only change: the underlying CSS variable/Tailwind class name
- * ("verified") is kept as-is rather than renamed to "brand" — renaming
- * would require touching ~50 component files' worth of Tailwind classes
- * for a purely cosmetic reason, which is a larger blast radius than this
- * design pass calls for. Only the color VALUES change here; every
- * bg-verified/text-verified/border-verified usage throughout the app
- * automatically picks up the new Banao Digital orange with zero other
- * files touched.
+ * BD Clarity now has its own product identity, separate from Banao
+ * Digital's parent-brand copper-orange:
+ *   - "verified" = BD Clarity's primary/AI accent (Indigo/Violet).
+ *     Kept under its original variable/class name (bg-verified,
+ *     text-verified-dark, etc.) rather than renamed, so the ~56 files
+ *     already using it for genuinely primary/AI purposes (CTAs, active
+ *     nav, AI recommendations, the generating/intelligence treatment)
+ *     automatically pick up the new color with zero changes — but
+ *     every place "verified" was standing in for SUCCESS rather than
+ *     PRIMARY/AI has been deliberately redirected to the new "success"
+ *     (Emerald) token instead, file by file, not blindly.
+ *   - "success" (NEW) = Emerald — positive sentiment, completed states,
+ *     confirmations. Previously these incorrectly shared the orange
+ *     primary accent; now distinct.
+ *   - "voice" (NEW) = Teal/Cyan — Customer Voice, Customer Pulse.
+ *   - "gold" = Amber — ratings, attention/warnings (unchanged, was
+ *     already correct — except the one AI Recommendation card that had
+ *     wrongly borrowed gold for an AI purpose; that moves to "verified").
+ *   - "danger" = Red — critical/error (unchanged, already correct).
+ *   - "banao" (NEW) = the OLD copper-orange, now reserved narrowly for
+ *     explicit parent-brand moments (BanaoAttribution.tsx) only — never
+ *     the default for any BD Clarity CTA, success, AI, or nav state.
  */
 :root {
-  --color-paper: #faf7f2;
+  --color-paper: #f6f8fb;
   --color-paper-raised: #ffffff;
-  --color-ink: #14213d;
-  --color-ink-soft: #384057;
-  --color-slate: #5b6472;
-  --color-border: #e6e1d8;
-  --color-border-strong: #d6cfc1;
-  --color-verified: #c1611e;
-  --color-verified-dark: #9c4e18;
-  --color-verified-tint: #fbeee2;
+  --color-ink: #0f1729;
+  --color-ink-soft: #334155;
+  --color-slate: #64748b;
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;
+
+  /* Primary / BD Clarity intelligence (Indigo/Violet) */
+  --color-verified: #5b4fd6;
+  --color-verified-dark: #4338ab;
+  --color-verified-tint: #ece9fb;
+
+  /* Success / positive sentiment / completed states (Emerald) */
+  --color-success: #16915f;
+  --color-success-dark: #0f6e48;
+  --color-success-tint: #e3f6ed;
+
+  /* Customer Voice / Customer Pulse (Teal/Cyan) */
+  --color-voice: #0e9ba8;
+  --color-voice-dark: #0a7a85;
+  --color-voice-tint: #e0f5f6;
+
+  /* Ratings / attention / warnings (Amber — unchanged) */
   --color-gold: #c08a2e;
   --color-gold-tint: #f8eedb;
+
+  /* Critical / error (unchanged) */
   --color-danger: #b3432b;
   --color-danger-tint: #f8e9e4;
 
-  /* Premium accent gradient — used sparingly (hero/login/greeting
+  /* Banao Digital parent-brand copper-orange — reserved for explicit
+     parent-brand moments only (see BanaoAttribution.tsx). Never the
+     default color for a BD Clarity CTA, success, AI, or nav state. */
+  --color-banao: #c1611e;
+  --color-banao-dark: #9c4e18;
+
+  /* Premium accent gradient — BD Clarity's OWN identity gradient
+     (Indigo -> lighter Violet), used sparingly (hero/login/greeting/AI
      moments only), per "gradients only where they genuinely improve the
      design," never as a default button/card background. */
-  --gradient-brand: linear-gradient(135deg, #c1611e 0%, #e2934f 100%);
-  /* Soft, deep canvas wash for full-page backgrounds (auth, public
+  --gradient-brand: linear-gradient(135deg, #4338ab 0%, #7c6ae8 100%);
+  /* The old Banao copper gradient — kept, narrowly, for parent-brand
+     moments only (BanaoAttribution.tsx), never used as the product's
+     own primary gradient anymore. */
+  --gradient-banao: linear-gradient(135deg, #c1611e 0%, #e2934f 100%);
+  /* Soft, cool canvas wash for full-page backgrounds (auth, public
      feedback) — gives a page body intentional depth instead of flat
      white, without being a loud "gradient background." Always sits
      behind paper-raised cards, never behind them competing for
      attention. */
-  --gradient-canvas: radial-gradient(ellipse 120% 80% at 50% -10%, #fdf2e7 0%, #faf7f2 55%);
+  --gradient-canvas: radial-gradient(ellipse 120% 80% at 50% -10%, #ece9fb 0%, #f6f8fb 55%);
 
   /* Premium, warm-tinted shadow scale — deliberately not pure black, so
      elevation reads as soft/premium rather than a generic UI-kit drop
@@ -79,10 +116,18 @@
   --color-verified: var(--color-verified);
   --color-verified-dark: var(--color-verified-dark);
   --color-verified-tint: var(--color-verified-tint);
+  --color-success: var(--color-success);
+  --color-success-dark: var(--color-success-dark);
+  --color-success-tint: var(--color-success-tint);
+  --color-voice: var(--color-voice);
+  --color-voice-dark: var(--color-voice-dark);
+  --color-voice-tint: var(--color-voice-tint);
   --color-gold: var(--color-gold);
   --color-gold-tint: var(--color-gold-tint);
   --color-danger: var(--color-danger);
   --color-danger-tint: var(--color-danger-tint);
+  --color-banao: var(--color-banao);
+  --color-banao-dark: var(--color-banao-dark);
 
   --font-display: var(--font-display);
   --font-body: var(--font-body);

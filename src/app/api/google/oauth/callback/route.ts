@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { exchangeCodeForTokens } from "@/lib/google/oauth";
 import { encryptToken, isTokenEncryptionConfigured } from "@/lib/google/tokenCrypto";
+import { getActiveBusinessId } from "@/lib/business/activeBusiness";
 
 /**
  * Google OAuth callback. Server-only route — the authorization code
@@ -51,13 +52,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/login?redirectTo=/dashboard/settings/google", request.url));
   }
 
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id")
-    .eq("owner_id", user.id)
-    .maybeSingle();
+  const businessId = await getActiveBusinessId(supabase);
 
-  if (!business) {
+  if (!businessId) {
     settingsUrl.searchParams.set("error", "Set up your business profile first.");
     return NextResponse.redirect(settingsUrl);
   }
@@ -84,7 +81,7 @@ export async function GET(request: NextRequest) {
   const { data: connection, error: insertError } = await supabase
     .from("google_business_connections")
     .insert({
-      business_id: business.id,
+      business_id: businessId,
       // bytea columns via PostgREST: hex-encoded, \x-prefixed text form.
       access_token_encrypted: `\\x${accessTokenEncrypted.toString("hex")}`,
       refresh_token_encrypted: `\\x${refreshTokenEncrypted.toString("hex")}`,

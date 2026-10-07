@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { FeedbackFlow } from "@/components/feedback/FeedbackFlow";
 import { Logo } from "@/components/ui/Logo";
 import { BanaoAttribution } from "@/components/ui/BanaoAttribution";
+import { getTheme, themeCssVars } from "@/lib/branding/themes";
 
 export default async function PublicFeedbackPage({
   params,
@@ -18,13 +19,23 @@ export default async function PublicFeedbackPage({
   const supabase = await createClient();
   const { data: page } = await supabase
     .from("feedback_pages")
-    .select("public_code, tags, is_active, business_name, category, city, logo_url, google_review_url")
+    .select(
+      "public_code, tags, is_active, business_name, category, city, logo_url, google_review_url, brand_theme"
+    )
     .eq("public_code", code)
     .maybeSingle();
 
   if (!page || !page.is_active) {
     notFound();
   }
+
+  // Settings > Brand & Experience — a curated theme preset, not a free
+  // color picker (see src/lib/branding/themes.ts). Applied as inline CSS
+  // variable overrides scoped to this page only; every existing
+  // bg-verified/text-verified-dark/var(--gradient-brand) usage already
+  // throughout FeedbackFlow.tsx picks this up automatically — zero
+  // changes needed there.
+  const theme = getTheme(page.brand_theme);
 
   // public.feedback_page_questions — the up-to-2 active context questions
   // for this business, keyed by the same public_code. Same narrow-view
@@ -36,7 +47,7 @@ export default async function PublicFeedbackPage({
     .order("sort_order", { ascending: true });
 
   return (
-    <div className="flex min-h-screen flex-col bg-canvas">
+    <div className="flex min-h-screen flex-col bg-canvas" style={themeCssVars(theme)}>
       <header className="border-b border-border/70 px-6 py-4">
         <div className="mx-auto w-full max-w-2xl">
           <Logo compact />

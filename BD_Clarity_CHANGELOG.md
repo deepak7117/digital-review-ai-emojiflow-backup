@@ -32,6 +32,168 @@ The product's working name changed from "BD Voice" to "BD Clarity" — the actua
 
 **All other audit items: confirmed clean.** See the full report delivered in conversation for the complete 12-point breakdown, file/database-object inventory, and manual testing checklist.
 
+## v2.9 — Multi-Store / Multi-Business Management
+
+**Status: complete and verified. 31 files changed, one new migration, zero existing migrations or RLS policies modified.**
+
+**Migration (0018):** one new table, `platform_settings` — a single-row, typed-column design (not a generic key-value store, since this project has no prior precedent for one and two values don't need that complexity). Holds `multistore_enabled` and `max_businesses_per_owner`, CHECK-constrained server-side to 1–4 regardless of what the UI allows. RLS: any authenticated owner can read it (needed to know whether to show switcher UI at all), only `super_admin` can write it, reusing the existing `get_admin_role()` helper — no new permission system. **Zero changes to `businesses` or its RLS** — confirmed during inspection that `owner_id` already had no unique constraint and RLS already scoped via `auth.uid() = owner_id`, already plural-safe.
+
+**The resolver (`src/lib/business/activeBusiness.ts`):** `getActiveBusiness()` replaces the ~20 call sites that used to assume one owner = one business. Security property tested twice before touching any call site, per the required ordering: against real Postgres (an attacker-supplied business ID not owned by the requesting owner returns zero rows) and in isolated JS logic (a cookie naming a business outside the owner's own fetched list safely falls back to their first business). The cookie is never used in a database query directly — only to pick among rows a fresh, RLS-protected, `owner_id`-scoped query already returned.
+
+**`setActiveBusiness()` and `createBusiness()`** (`src/lib/business/actions.ts`): both re-validate ownership/limits server-side from scratch on every call — never trust the switcher UI's own display. `createBusiness()` runs a fresh `COUNT` query against the real table before allowing creation, checked against the live `platform_settings` row, not a cached or client-supplied value.
+
+**The real bug fixed as part of this milestone, not hypothetical:** `BusinessProfileForm.tsx`'s update previously targeted by `owner_id` alone — harmless with one business, but would have silently updated every business an owner has (or an ambiguous one) now that they can have several. Fixed to target the specific business `id`, with `owner_id` kept as a defense-in-depth check. Verified live: updating Business A changed only Business A; Business B was provably untouched.
+
+**All 20 original single-business call sites migrated**, confirmed via a final grep sweep (only 3 matches remained afterward, all correct/intentional: the resolver's own query, the two re-validation queries, and the fixed profile-form update).
+
+**Business Switcher:** subtle static pill when an owner has one business (or the feature is disabled) — identical in appearance to the old static pill, confirmed via code; full dropdown (current business, checkmark, available businesses with city, "+ Add Business" or the limit message) when they have more than one. Added as an optional prop on the existing `Header.tsx`, which falls back to its old behavior if omitted — not a redesign.
+
+**Add Business:** three fields only (name, type/industry, city), per the approved minimal scope. No billing/subscription logic of any kind.
+
+**Super Admin:** one new small panel on the existing `/admin` dashboard (no new page) — Multi-Store Enabled/Disabled toggle and a 1–4 selector, editable only by `super_admin`, read-only display for other admin roles. The businesses list gets the smallest possible visibility addition: a per-owner business count badge computed from data already fetched (zero new queries), not a restructured grouped view.
+
+**Full required test matrix, all run against real data, all passed:** business switching (list correctly scoped per owner), the 4-business limit (Owner A brought to exactly 4, confirmed the real count-check logic would reject a 5th), the configurable limit re-tested at a non-default value of 2 (confirmed correct in both directions — rejects an owner already at/above it, allows one below it), feature-disabled behavior (existing 4 businesses confirmed fully intact after disabling, nothing deleted or deactivated), cookie security (attacker-style cross-owner business ID correctly rejected), direct ID manipulation (RLS blocks a cross-owner read even bypassing the resolver entirely), profile-update isolation (the fixed bug, proven), and a full existing-module regression (feedback, Google connections, admin role, public feedback page, rate limiter) plus a fresh cross-business isolation re-check.
+
+**Typecheck/Lint/Build:** all PASS — **25 routes, unchanged** (no new Super Admin page, no new customer-facing route — confirms nothing beyond the owner dashboard's own routes was touched).
+
+**Browser/device verification: not performed, not claimed.** Every result above comes from live database testing and code tracing, not sight.
+
+## v2.8 — BD Clarity Visual Identity Redesign
+
+**Status: complete and verified. No business logic, database schema, RLS, or Super Admin permissions touched anywhere.**
+
+**One honest operational note:** mid-implementation, this environment's container reset entirely — the working directory, PostgreSQL, and all test data were lost. Recovered by restoring from the pre-milestone checkpoint (the only artifact that survived, since it had already been copied to persistent output storage), reinstalling PostgreSQL and all dependencies, rebuilding the full 17-migration chain with the same local-testing bootstrap used throughout this project, reseeding identical test data, and redoing every edit described below from scratch. `package-lock.json` shows as changed only because of the dependency reinstall — `package.json` itself is byte-identical to before, confirmed via direct diff.
+
+**Files changed (8):** `globals.css` (token layer), `FeedbackFlow.tsx`, `DashboardHeroCards.tsx`, `mobile/MobileHome.tsx`, `dashboard/settings/page.tsx`, `admin/page.tsx`, `admin/businesses/page.tsx`, `admin/businesses/[id]/page.tsx`.
+
+**Design tokens added/changed:** `--color-verified` (now Indigo/Violet `#5b4fd6`, BD Clarity's own primary/AI accent, replacing the Banao orange it held since the original rebrand), new `--color-success` (Emerald `#16915f`), new `--color-voice` (Teal `#0e9ba8`), `--color-gold`/`--color-danger` unchanged (already correct), new `--color-banao` (the old copper-orange, now reserved narrowly for parent-brand-only moments), background `--color-paper` moved from warm beige `#faf7f2` to cool `#f6f8fb`, `--gradient-brand` is now BD Clarity's own Indigo gradient with a separate `--gradient-banao` kept for parent-brand use.
+
+**Semantic color mapping applied:** primary/AI → Indigo, customer voice → Teal, success/positive → Emerald, warnings/ratings → Amber (unchanged), critical → Red (unchanged), structure/navigation → Midnight. Three genuine pre-existing semantic *mismatches* were found and corrected during this pass (not invented to pad the changelog — found by literally reading the code): the "AI Recommendation" card had been using Amber/gold (now Indigo), and audit-log/account-history "success" results in two separate admin files had been using the primary/AI token instead of a true success color (now Emerald) — the same bug, independently present in both `admin/page.tsx` and the business detail page.
+
+**Customer experience changes:** emoji sentiment glow redirected to Emerald (the customer's own feeling, not BD Clarity's AI — deliberately not left on the primary token just because it used to be "the brand color"). The "generating" step redesigned with an Indigo intelligence treatment ("Understanding your experience… BD Clarity is reading between the lines"). The review-ready screen — the explicitly highest-priority item — fully reworked: restrained gradient top accent, an explicit "BD Clarity understood your experience" lead-in, checkmarks moved to Emerald (success, not AI), the generated-review container given a subtle Indigo tint, and the "Continue to Google" CTA given the actual Indigo gradient treatment as the one deliberate "AI result highlight," per the gradient rule. Both thank-you/completion screens moved to Emerald. The customer flow's step logic itself was not touched.
+
+**Owner dashboard changes:** Experience Score "Excellent" and positive sentiment moved to Emerald (desktop and mobile both); Customer Voice sections given a Teal accent dot/border (desktop and mobile); Needs Attention given an Amber/Emerald status dot; both AI Recommendation mismatches fixed to Indigo.
+
+**Settings changes:** the hub's three "is this active/working" status indicators (Notifications, Google connection, QR status) now show Emerald when active, neutral otherwise. `brand_theme` functionality is completely untouched — confirmed via live test (value still persists, propagates to the public customer-facing view, and cross-business isolation still holds). The 7 curated customer themes in `src/lib/branding/themes.ts` were deliberately left unmodified, per the explicit "minimum safe changes only" instruction — they remain independently curated, still look coherent, and didn't require changes to work correctly alongside the new owner-chrome palette.
+
+**Super Admin changes:** KPI cards now carry real semantic meaning instead of being uniformly neutral (Active → Emerald, Suspended → Red, New registrations → Indigo, QR/feedback activity → Teal), plus the two success/danger mismatches described above. No new shared Card component was created, per the explicit instruction to keep the architecture stable this milestone — every fix reuses the existing markup patterns and conditional className approach already present in each file.
+
+**Functional logic touched: No.** Every change in this milestone is a CSS class/token value — no props, state, data-fetching, server action, or business-logic branch was altered anywhere.
+
+**Tests performed, all live:** full cross-module regression (businesses including `brand_theme`, feedback submissions, admin role, public feedback page, rate limiter) plus explicit cross-business isolation checks (Owner B confirmed unable to read Owner A's business or feedback data) — all passed. `tsc --noEmit` PASS, `eslint` PASS, `next build` PASS — **25 routes, unchanged**.
+
+**Browser/device verification: not available in this environment, and none is claimed anywhere in this entry or the report below** — every change above is verified by code tracing, compilation, and live database testing, never by sight.
+
+## v2.7.1 — Settings Visual QA Pass (structural code review only — no browser/device access)
+
+**Status: complete. No browser/device capability exists in this environment — this is explicitly a code-level structural review, not visual verification, and is never described as the latter anywhere in this entry.**
+
+**File changed:** `src/app/dashboard/settings/page.tsx` only.
+
+**One genuine structural defect found and fixed:** all 4 clickable hub cards (Business Profile, Brand & Experience, Google Business Profile, QR Feedback) rendered their text content inside a flex row with a fixed-width arrow icon sibling, but the text-containing flex child had no `min-w-0`, and the text itself had no `truncate`. In a flex container, a child without `min-w-0` does not shrink to fit available space by default — with sufficiently long content (a long business name, or an unpredictable Google-sourced location name), this card could overflow its container rather than truncating cleanly, directly risking the "no overflowing cards" / "no horizontal scrolling on mobile" requirements this QA pass specifically asked about. Fixed by adding `min-w-0 flex-1` to each card's content wrapper and `truncate` to the variable-length text lines — the standard, well-established CSS pattern for this exact class of bug (already used elsewhere in this codebase, e.g. the admin header's email display).
+
+**Deliberately not touched:** `src/app/dashboard/more/page.tsx` uses a similar card pattern and has the same latent gap, but it predates this Settings milestone (built in the Mobile App Transformation pass) and its text content is short/static (module names I wrote myself), not unpredictable real data — materially lower real-world risk, and fixing it would be outside this milestone's explicit scope ("fix only that bug"). Noted here for a possible future, separately-scoped pass.
+
+**What was NOT verified, stated plainly:** anything requiring sight — card spacing, hierarchy, theme swatch selected-state visibility, live preview appearance, actual mobile stacking, hover/pressed states, whether the fix *looks* correct once rendered. None of this was performed or is claimed. See the manual checklist below for exactly what requires your own eyes.
+
+**Tests performed:** `tsc --noEmit` PASS, `eslint` PASS, `next build` PASS (25 routes, unchanged), full live-Postgres regression (businesses incl. `brand_theme`, feedback submissions, admin role, public feedback page, rate limiter) — all passed.
+
+## v2.7 — Settings / Business Control Center
+
+**Status: complete and verified. Every claimed-functional setting passed the full required lifecycle test (open → change → save → persists → reload → customer experience uses it). Nothing faked.**
+
+**Files changed (10):** new migration `0017_brand_theme.sql`, `src/lib/branding/themes.ts`, `settings/actions.ts`, `settings/brand/page.tsx`, `BrandSettingsForm.tsx`, `SettingsSignOutButton.tsx`; modified: `settings/page.tsx` (full rewrite, from a single Google link to the hub), `feedback/[code]/page.tsx` (theme wiring), `dashboard/more/page.tsx` (description text correction), `types/database.ts`.
+
+**Database:** one additive migration — `businesses.brand_theme` (new column, CHECK-constrained to the 7 curated theme IDs) and `feedback_pages` (view extended via `CREATE OR REPLACE VIEW` to also expose `brand_theme` to anon — required for the theme to actually reach the customer page at all, since anon cannot read `businesses` directly). **No existing RLS policy was changed** — the existing owner-only/admin-read-only policies on `businesses` already cover the new column automatically, since RLS is row-level, not column-level. `0002_qr_feedback.sql` (where the view originates) was not edited.
+
+**Existing data reused, not duplicated:** `getSettingsSummary()` aggregates from `businesses`, `google_business_connections`, and `feedback_links` — all pre-existing tables/queries. Google and QR sections are summary cards linking to the already-built `/dashboard/settings/google` and `/dashboard/qr-feedback` pages — not rebuilt.
+
+### Genuinely functional (verified via the full required lifecycle)
+
+- **Logo URL** — plain text URL field (not a file upload — this project has no storage infrastructure, and building a fake upload control would violate the explicit no-fake-functionality requirement). Saves to the existing `businesses.logo_url` column, already consumed by `FeedbackFlow.tsx`'s avatar rendering.
+- **Brand theme** — 7 curated presets (not a free color picker). Verified live: saving a theme is immediately visible through the public `feedback_pages` view, and the actual customer page applies it via scoped CSS variable overrides — zero changes needed to `FeedbackFlow.tsx` itself, since it already consumes these same variables throughout.
+- **Business Profile, Google, QR summaries** — real data, real links to already-working pages.
+- **Security & Account** — real email, real static role label, real sign-out (reuses the exact same `supabase.auth.signOut()` call already in `Header.tsx`, not a second implementation).
+- **Notifications: negative-feedback alert** — shown as "On," because it genuinely is (the existing `owner_notifications` system from an earlier milestone).
+
+### Honestly labeled planned, not faked
+
+- **Branches** — static "Planned" card, no link, no fabricated data. No branches table exists; none was created in this milestone.
+- **New review alerts / AI recommendation alerts** — labeled "Planned." No notification-type system was invented to populate these.
+- **Password change** — no in-settings form; links to the existing `/forgot-password` flow instead of inventing a new, unbacked change-password UI.
+
+### Tests performed, all live
+
+- 4 migration-level tests (defaults, owner update, invalid-value rejection, cross-owner isolation) from the initial schema step
+- 2 view-extension tests (anon can read `brand_theme` through `feedback_pages`; a theme change propagates through the view in real time)
+- **The explicitly required full lifecycle test:** change logo_url + theme as the owner → reload as the owner (value persists) → read via the real public customer-facing view (value is there) → attempt as a different owner (0 rows, update rejected) → admin read-only parity confirmed unaffected
+- Full cross-module regression: businesses, feedback, Google connections, admin role, public feedback page, context questions, rate limiter — all passed
+- `tsc --noEmit` PASS, `eslint` PASS, `next build` PASS — **25 routes, correctly +1** for `/dashboard/settings/brand`
+
+**Confirmed NOT touched, exactly as scoped:** the customer feedback state machine (zero changes to `FeedbackFlow.tsx` itself — only the page wrapper gained a CSS-variable override), Super Admin, the existing Google OAuth/Reviews integration, existing QR mapping, all RLS policies, migrations `0001`–`0016`.
+
+## v2.6 — Full Functionality & Click Audit
+
+**Status: complete. 2 genuine bugs found and fixed; everything else traced and confirmed working. No redesign, no new modules, no architecture changes.**
+
+**Files changed (3):** `Header.tsx`, `Sidebar.tsx`, `dashboard/more/page.tsx`.
+
+### Bug 1 — stuck-open profile menu across navigation (the flagged "known issue")
+
+| Area | Element | Expected | Actual | Root Cause | Fix |
+|---|---|---|---|---|---|
+| Dashboard shell | Header profile dropdown | Closes when navigating to a different page | Stayed visibly open, overlaying the new page | `DashboardHeader` lives in the persistent `dashboard/layout.tsx` (never remounted when only the page changes); its `open` state had no logic tied to route changes and no click-outside handler | Added a render-time pathname comparison that closes the menu the instant the route changes, plus a click-outside handler as a second, independent safeguard |
+
+**One real mistake caught during the fix itself, not shipped broken:** my first attempt used `useEffect(() => setOpen(false), [pathname])` — a plausible-looking fix that this project's ESLint config correctly flags as a real anti-pattern (`react-hooks/set-state-in-effect`: unconditional `setState` in an effect body causes unnecessary extra render passes). Corrected using React's own documented pattern for this exact scenario — comparing the previous and current value *during render* and calling the setter conditionally, which is not subject to that rule at all. Verified both the fix and the correction live via `eslint`, not just assumed.
+
+### Bug 2 — Settings marked "Coming Soon" despite having real, working content
+
+| Area | Element | Expected | Actual | Root Cause | Fix |
+|---|---|---|---|---|---|
+| Sidebar + More screen | Settings nav item | Clickable, since the page has a real, functional Google Business Profile connection card | Rendered disabled with a "Soon" badge in both navigation surfaces, making a working feature unreachable via normal navigation | The `enabled: false` flag was never updated after the Settings page gained real content in an earlier milestone | Flipped to `enabled: true` in both `Sidebar.tsx` and `more/page.tsx` |
+
+### Verification performed (not merely asserted)
+
+- **32 `onClick` handlers** across dashboard/admin/feedback components listed and traced individually — zero literal no-ops found; spot-checked `BusinessProfileForm.tsx`'s `applyCandidate` and confirmed it genuinely updates form state (not a silent no-op)
+- **Every navigation href** in `Sidebar.tsx`, `MobileBottomNav.tsx`, and `more/page.tsx` cross-checked against the real build output route list — all resolve to genuine, existing routes
+- **Component keying checked** for `ReviewReplyCard` (in `reputation/page.tsx`) and `ReviewGenerator` (in `FeedbackList.tsx`) — both correctly keyed by real database UUIDs (`review.id`, `s.id`), confirming no shared-state leakage between multiple instances on the same page
+- **`admin/layout.tsx`** confirmed to have zero client-side toggle state — not susceptible to the same persistent-state bug as the dashboard header
+- Admin back-navigation links (`/admin/businesses` list↔detail, "Back to dashboard") confirmed pointing to real routes
+- Full cross-module regression (businesses, feedback, Google connections, admin role, public feedback page, rate limiter) — all passed
+- `tsc --noEmit`, `eslint`, `next build` — all clean, **24 routes, unchanged**
+
+### Issues found vs. fixed vs. remaining
+
+- **Found:** 2 (both above)
+- **Fixed:** 2
+- **Remaining:** 0 confirmed bugs. No larger architectural problem was discovered — nothing required stopping to report per the "no architectural changes" instruction.
+
+**What was NOT verified — no browser/device access exists in this environment:** see the manual checklist below.
+
+## v2.5 — Premium Mobile App UX Transformation (owner dashboard only)
+
+**Status: complete, code/build/regression verified. No visual/device rendering performed — see the manual verification checklist below, provided instead of a false claim of visual confirmation.**
+
+**Files changed (6), all scoped to dashboard navigation/home:** new `MobileBottomNav.tsx`, new `mobile/MobileHome.tsx`, new `/dashboard/more/page.tsx`; modified additively: `dashboard/layout.tsx`, `dashboard/page.tsx`, `Sidebar.tsx` (removed its own earlier mobile tab bar, now superseded by the purpose-built bottom nav, to avoid two competing mobile navigations existing at once).
+
+**Confirmed zero new data computation:** every value in the new mobile home comes from data `dashboard/page.tsx` already computed (Experience Score, feedback analytics, top recommended action — the exact same pipeline `/dashboard/intelligence` uses) or from two already-existing server actions (`getReputationMetrics()`, `getActiveConnectionSummary()`, both built in the Google Reviews milestone). The only new arithmetic is a simple 4-point setup-completeness tally (business name / category+city / Google URL / segment — all real boolean checks on real business fields), not a new business-logic system.
+
+**Information architecture, as requested:** header → Experience Score hero (radial progress, real score) → real sentiment distribution (positive/neutral/negative %, derived from the existing per-rating `distribution` counts, never estimated) → Needs Attention + AI Recommendation (deliberately shown as one section, not two — they're the same underlying `topAction` object in this data model; presenting it twice would be redundant, not more informative) → Customer Voice excerpts (real recent messages, truncated, never fabricated) → Google Reviews summary → quick actions. Secondary modules (Business Profile, QR Feedback, Customer Actions, Customer Pulse, Analytics, Settings) moved to a new `/dashboard/more` screen, keeping Home compact per the requested hierarchy.
+
+**Premium empty states, real-data-gated throughout:** no Experience Score exists → "Your Experience Score is waiting" with a real QR-code CTA, never a fabricated number. No Google connection → "Connect your Google Business Profile," never fake review counts. Connected but not yet synced → an honest intermediate state distinct from both. Incomplete setup → a compact progress bar at a real percentage, never a "giant boring warning box."
+
+**Desktop confirmed unaffected:** the entire existing desktop dashboard (`DashboardGreeting`, `DashboardHeroCards`, the business/Google-link cards, "What's next") is wrapped unchanged in a `hidden md:flex` container — same JSX, same data, same behavior, simply hidden below the `md` breakpoint where the new mobile home takes over instead. Nothing was "shrunk" — mobile and desktop are two genuinely separate presentations of the same underlying data, exactly as required.
+
+**One real redundancy caught and fixed during implementation:** `Sidebar.tsx` already had its own mobile tab bar from an earlier design pass. Left in place alongside the new bottom nav, mobile users would have seen two competing navigation systems simultaneously. Removed the old one, confirmed via lint that the resulting unused `flatNavItems` variable was also caught and removed.
+
+**Tests performed, all real:**
+- Live Postgres: full cross-module regression (businesses, feedback, owner notifications, Google reviews, Google connections, admin role, public feedback page, rate limiter) — all passed, confirming zero functional impact
+- Confirmed via query that real test-business data produces a genuine 75% setup-completeness value (3 of 4 checks true), not a rounded/fabricated figure
+- `tsc --noEmit` PASS, `eslint` PASS, `next build` PASS — **24 routes, correctly +1** for `/dashboard/more`, the only new route
+- Confirmed via file-modification-time check: zero touch to the customer feedback flow, Admin/Super Admin, Google OAuth foundation, AI reply engine, RLS, or any of the 16 existing migrations
+
+**What remains genuinely unverified — no visual/device rendering was performed, and none is claimed:** see the manual verification checklist below.
+
 ## v2.4 — Final Customer Experience Simplification: Emoji-Only Reaction Flow
 
 **Status: complete and verified. Single file changed — the smallest possible implementation, exactly as required.**

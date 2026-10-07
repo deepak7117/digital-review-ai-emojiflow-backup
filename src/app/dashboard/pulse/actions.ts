@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { generateFeedbackCode } from "@/lib/utils/slug";
 import { revalidatePath } from "next/cache";
+import { getActiveBusiness } from "@/lib/business/activeBusiness";
 
 export interface PollWithResults {
   id: string;
@@ -24,13 +25,7 @@ async function getOwnedBusinessId(
 
   if (!user) return { error: "You need to be logged in." };
 
-  const { data: business, error } = await supabase
-    .from("businesses")
-    .select("id")
-    .eq("owner_id", user.id)
-    .maybeSingle();
-
-  if (error) return { error: error.message };
+  const { business } = await getActiveBusiness(supabase);
   if (!business) return { error: "Set up your business profile first." };
 
   return { businessId: business.id };

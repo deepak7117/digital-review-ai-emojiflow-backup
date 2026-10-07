@@ -6,6 +6,7 @@ import { Alert } from "@/components/ui/Alert";
 import { isAiConfigured } from "@/lib/ai/reviewDraft";
 import { getSegmentConfig, getFeedbackTagsForSegment } from "@/lib/segments/engine";
 import { DEFAULT_FEEDBACK_TAGS } from "@/lib/config/tags";
+import { getActiveBusiness } from "@/lib/business/activeBusiness";
 
 export default async function QrFeedbackPage() {
   const supabase = await createClient();
@@ -15,11 +16,7 @@ export default async function QrFeedbackPage() {
 
   if (!user) redirect("/login");
 
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id, business_name, google_review_url, industry_slug, segment_slug")
-    .eq("owner_id", user.id)
-    .maybeSingle();
+  const { business } = await getActiveBusiness(supabase);
 
   if (!business) {
     return (

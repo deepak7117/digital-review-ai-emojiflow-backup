@@ -7,6 +7,7 @@ import { generateAllCommentStyles } from "@/lib/reviewEngine/commentGenerator";
 import type { GeneratedReplySet, Tone } from "@/lib/reviewEngine/types";
 import type { CommentStyle } from "@/lib/reviewEngine/commentGenerator";
 import type { GeneratedComment } from "@/lib/reviewEngine/types";
+import { getActiveBusiness } from "@/lib/business/activeBusiness";
 
 /**
  * Resolves the caller's own business — never trusts a business id supplied
@@ -24,13 +25,7 @@ async function getOwnedBusiness(
   } = await supabase.auth.getUser();
   if (!user) return { error: "You need to be logged in." };
 
-  const { data: business, error } = await supabase
-    .from("businesses")
-    .select("id, business_name, industry_slug, segment_slug")
-    .eq("owner_id", user.id)
-    .maybeSingle();
-
-  if (error) return { error: error.message };
+  const { business } = await getActiveBusiness(supabase);
   if (!business) return { error: "Set up your business profile first." };
 
   return { business };

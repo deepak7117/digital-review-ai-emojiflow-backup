@@ -113,7 +113,7 @@ export default async function AdminBusinessDetailPage({
                   <span className="font-medium text-ink">{entry.action}</span>
                   <span
                     className={`font-mono text-[10px] uppercase tracking-wider ${
-                      entry.result === "success" ? "text-verified" : "text-danger"
+                      entry.result === "success" ? "text-success-dark" : "text-danger"
                     }`}
                   >
                     {entry.result}

@@ -53,10 +53,13 @@ const emptyProfile: BusinessProfileData = {
 export function BusinessProfileForm({
   initialData,
   hasExistingRecord,
+  businessId,
   googlePlacesConfigured,
 }: {
   initialData: BusinessProfileData | null;
   hasExistingRecord: boolean;
+  /** The specific business being edited — required for updates now that one owner can have multiple businesses. Not needed when creating the first/a new one. */
+  businessId: string | null;
   googlePlacesConfigured: boolean;
 }) {
   const router = useRouter();
@@ -134,9 +137,17 @@ export function BusinessProfileForm({
 
     const payload = { ...form, owner_id: user.id };
 
-    const { error } = hasExistingRecord
-      ? await supabase.from("businesses").update(payload).eq("owner_id", user.id)
-      : await supabase.from("businesses").insert(payload);
+    // Fixed as part of the Multi-Store milestone: this used to update by
+    // owner_id alone, which was harmless when an owner could only ever
+    // have one business, but would silently update EVERY business that
+    // owner owns (or the wrong one) now that they can have several.
+    // Scoping by the specific business id — re-checked against
+    // owner_id too, and RLS enforces this regardless — targets exactly
+    // the business being edited.
+    const { error } =
+      hasExistingRecord && businessId
+        ? await supabase.from("businesses").update(payload).eq("id", businessId).eq("owner_id", user.id)
+        : await supabase.from("businesses").insert(payload);
 
     if (error) {
       setStatus("error");

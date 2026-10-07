@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { searchBusinesses } from "@/app/admin/businesses/actions";
 
+/** ACTIVE -> Emerald, SUSPENDED -> Red, per the approved semantic status colors. */
 const STATUS_TONE: Record<string, string> = {
-  active: "bg-verified-tint text-verified-dark",
+  active: "bg-success-tint text-success-dark",
   inactive: "bg-ink/5 text-slate",
   suspended: "bg-danger-tint text-danger",
 };
@@ -14,6 +15,17 @@ export default async function AdminBusinessesPage({
 }) {
   const { q } = await searchParams;
   const result = await searchBusinesses(q);
+
+  // Smallest possible way to make multi-business ownership visible
+  // without restructuring this list into a grouped view: a per-owner
+  // count computed from the data already fetched above, no new query.
+  const ownerBusinessCounts = new Map<string, number>();
+  if ("data" in result) {
+    for (const b of result.data) {
+      if (!b.ownerEmail) continue;
+      ownerBusinessCounts.set(b.ownerEmail, (ownerBusinessCounts.get(b.ownerEmail) ?? 0) + 1);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -83,7 +95,14 @@ export default async function AdminBusinessesPage({
                       </p>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-ink-soft">{b.ownerEmail ?? "—"}</td>
+                  <td className="px-4 py-3 text-ink-soft">
+                    {b.ownerEmail ?? "—"}
+                    {b.ownerEmail && (ownerBusinessCounts.get(b.ownerEmail) ?? 0) > 1 && (
+                      <span className="ml-1.5 rounded-full bg-verified-tint px-1.5 py-0.5 font-mono text-[9px] text-verified-dark">
+                        {ownerBusinessCounts.get(b.ownerEmail)} businesses
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <span
                       className={`inline-flex rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${STATUS_TONE[b.status]}`}

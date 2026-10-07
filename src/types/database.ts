@@ -25,6 +25,7 @@ export interface Database {
           city: string | null;
           logo_url: string | null;
           google_review_url: string | null;
+          brand_theme: string;
         };
         Relationships: [];
       };
@@ -140,6 +141,7 @@ export interface Database {
           industry_slug: string | null;
           segment_slug: string | null;
           status: "active" | "inactive" | "suspended";
+          brand_theme: string;
           created_at: string;
           updated_at: string;
         };
@@ -158,6 +160,7 @@ export interface Database {
           industry_slug?: string | null;
           segment_slug?: string | null;
           status?: "active" | "inactive" | "suspended";
+          brand_theme?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -176,6 +179,7 @@ export interface Database {
           industry_slug?: string | null;
           segment_slug?: string | null;
           status?: "active" | "inactive" | "suspended";
+          brand_theme?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -702,6 +706,27 @@ export interface Database {
           publish_attempted_at?: string | null;
           publish_error?: string | null;
           created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      platform_settings: {
+        Row: {
+          id: boolean;
+          multistore_enabled: boolean;
+          max_businesses_per_owner: number;
+          updated_at: string;
+        };
+        Insert: {
+          id?: boolean;
+          multistore_enabled?: boolean;
+          max_businesses_per_owner?: number;
+          updated_at?: string;
+        };
+        Update: {
+          id?: boolean;
+          multistore_enabled?: boolean;
+          max_businesses_per_owner?: number;
           updated_at?: string;
         };
         Relationships: [];
