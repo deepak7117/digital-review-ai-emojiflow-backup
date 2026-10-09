@@ -8,6 +8,7 @@ import { BanaoAttribution } from "@/components/ui/BanaoAttribution";
 import { getUnreadNotificationCount } from "@/app/dashboard/notifications/actions";
 import { getActiveBusiness } from "@/lib/business/activeBusiness";
 import { BusinessSwitcher } from "@/components/dashboard/BusinessSwitcher";
+import { getBanaoContactDestination } from "@/lib/config/contact";
 
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
   const supabase = await createClient();
@@ -23,8 +24,10 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     redirect("/login");
   }
 
-  const { business, availableBusinesses, multistoreEnabled, maxBusinesses } = await getActiveBusiness(supabase);
+  const { business, availableBusinesses, multistoreEnabled, maxBusinesses, subscriptionBlocked } =
+    await getActiveBusiness(supabase);
   const unreadNotificationCount = await getUnreadNotificationCount();
+  const contact = getBanaoContactDestination();
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -38,6 +41,8 @@ export default async function DashboardLayout({ children }: { children: ReactNod
             businesses={availableBusinesses}
             multistoreEnabled={multistoreEnabled}
             maxBusinesses={maxBusinesses}
+            subscriptionBlocked={subscriptionBlocked}
+            contact={contact}
           />
         }
       />

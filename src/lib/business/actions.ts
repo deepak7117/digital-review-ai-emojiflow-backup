@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { ACTIVE_BUSINESS_COOKIE } from "@/lib/business/activeBusiness";
+import { ACTIVE_BUSINESS_COOKIE, computeEffectiveEntitlement } from "@/lib/business/activeBusiness";
 
 /**
  * Sets which business is active. The business id is re-validated
@@ -63,26 +63,58 @@ export interface CreateBusinessInput {
  * displayed (the switcher's own "at limit" UI is just a courtesy; this
  * is the real enforcement).
  */
+export type CreateBusinessBlockReason = "subscription_blocked" | "disabled" | "limit_reached";
+
 export async function createBusiness(
   input: CreateBusinessInput
-): Promise<{ ok: true; businessId: string } | { error: string }> {
+): Promise<
+  { ok: true; businessId: string } | { error: string; reason?: CreateBusinessBlockReason }
+> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "You need to be logged in." };
 
-  const { data: settings } = await supabase
-    .from("platform_settings")
-    .select("multistore_enabled, max_businesses_per_owner")
-    .eq("id", true)
-    .maybeSingle();
+  const [settingsResult, entitlementResult] = await Promise.all([
+    supabase
+      .from("platform_settings")
+      .select("multistore_enabled, max_businesses_per_owner")
+      .eq("id", true)
+      .maybeSingle(),
+    supabase
+      .from("owner_entitlements")
+      .select("subscription_status, multi_business_enabled, max_businesses")
+      .eq("owner_id", user.id)
+      .maybeSingle(),
+  ]);
 
-  const multistoreEnabled = settings?.multistore_enabled ?? true;
-  const maxBusinesses = settings?.max_businesses_per_owner ?? 4;
+  const platformEnabled = settingsResult.data?.multistore_enabled ?? true;
+  const platformMax = settingsResult.data?.max_businesses_per_owner ?? 4;
+
+  // Single shared computation (src/lib/business/activeBusiness.ts),
+  // also used by getActiveBusiness() for the UI — not a second copy of
+  // this logic. An owner with no entitlement row is "not yet
+  // individually configured" — a temporary Phase 1 compatibility
+  // behavior, not a final subscription rule — and gets exactly the
+  // platform ceiling alone, nothing stricter.
+  const effective = computeEffectiveEntitlement(platformEnabled, platformMax, entitlementResult.data ?? null);
+
+  if (effective.subscriptionBlocked) {
+    return {
+      error:
+        effective.subscriptionStatus === "expired"
+          ? "Your subscription has expired. Contact Banao Digital to renew."
+          : "Your account access is currently restricted. Contact Banao Digital for assistance.",
+      reason: "subscription_blocked",
+    };
+  }
+
+  const multistoreEnabled = effective.multistoreEnabled;
+  const maxBusinesses = effective.maxBusinesses;
 
   if (!multistoreEnabled) {
-    return { error: "Adding additional businesses is currently disabled." };
+    return { error: "Adding additional businesses is currently disabled.", reason: "disabled" };
   }
 
   const { count } = await supabase
@@ -91,7 +123,10 @@ export async function createBusiness(
     .eq("owner_id", user.id);
 
   if ((count ?? 0) >= maxBusinesses) {
-    return { error: `You've reached your current ${maxBusinesses}-business limit.` };
+    return {
+      error: `You've reached your current ${maxBusinesses}-business limit.`,
+      reason: "limit_reached",
+    };
   }
 
   const businessName = typeof input.businessName === "string" ? input.businessName.trim().slice(0, 200) : "";

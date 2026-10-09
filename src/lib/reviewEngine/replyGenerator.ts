@@ -122,6 +122,18 @@ export interface GenerateRepliesOptions {
   tone?: Tone;
   /** Deterministic variation seed — defaults to a hash of the review content so the same review always yields the same set. */
   seed?: number;
+  /**
+   * Explicit regeneration counter (0 = first generation). Increments
+   * only when the owner clicks "Regenerate" — never on an ordinary page
+   * load, never automatically. Mixed into the seed so a regenerate
+   * request produces a genuinely different, but still grounded,
+   * selection from the SAME real template pool — never random/invented
+   * content, just a different valid combination of the same real
+   * phrases. Previously fixed at 0 implicitly, which combined with a
+   * content-only seed made repeated "Regenerate" clicks produce
+   * byte-identical output — the confirmed Phase 4 bug.
+   */
+  attempt?: number;
 }
 
 export function generateGoogleReplies(
@@ -129,17 +141,30 @@ export function generateGoogleReplies(
   options: GenerateRepliesOptions = {}
 ): GeneratedReplySet {
   const tone = options.tone ?? "professional";
-  const seedBase =
+  const contentSeed =
     options.seed ??
     hashString(`${context.businessName}|${context.rating}|${context.tags.join(",")}|${context.message ?? ""}`);
+  // A large, odd stride so each successive attempt lands on a genuinely
+  // different pool index rather than cycling back quickly — odd and
+  // coprime with the small pool sizes used below, so it visits more of
+  // the pool before repeating than a small/even stride would.
+  const attempt = options.attempt ?? 0;
+  const seedBase = contentSeed + attempt * 104729;
 
   const intelligence = computeReviewIntelligence(context);
+  // The real fix for the confirmed "Regenerate returns the same text"
+  // bug: previously hardcoded to "% 3", silently discarding half of
+  // every tone pool's 6 real, already-written variants. Sized off the
+  // pool's actual length so it always uses everything that's really
+  // there — no new content invented, just no longer throwing away half
+  // of what already existed.
+  const poolSize = TONE_POOLS[tone].positiveOpeners.length;
 
-  const recommendedText = composeReply(context, tone, seedBase % 3, "standard");
-  const altAText = composeReply(context, tone, (seedBase + 1) % 3, "standard");
-  const altBText = composeReply(context, tone, (seedBase + 2) % 3, "standard");
-  const shortText = composeReply(context, tone, seedBase % 3, "short");
-  const detailedText = composeReply(context, tone, seedBase % 3, "detailed");
+  const recommendedText = composeReply(context, tone, seedBase % poolSize, "standard");
+  const altAText = composeReply(context, tone, (seedBase + 1) % poolSize, "standard");
+  const altBText = composeReply(context, tone, (seedBase + 2) % poolSize, "standard");
+  const shortText = composeReply(context, tone, seedBase % poolSize, "short");
+  const detailedText = composeReply(context, tone, seedBase % poolSize, "detailed");
 
   return {
     intelligence,

@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { Field, Input } from "@/components/ui/Field";
-import { createBusiness } from "@/lib/business/actions";
+import { createBusiness, type CreateBusinessBlockReason } from "@/lib/business/actions";
+import type { ContactDestination } from "@/lib/config/contact";
+import { UpgradeContactState } from "@/components/dashboard/UpgradeContactState";
 
 const CATEGORIES = [
   "Restaurant / Cafe",
@@ -27,26 +29,41 @@ const CATEGORIES = [
  * createBusiness(); this form has no say over whether the attempt
  * succeeds.
  */
-export function AddBusinessModal({ onClose }: { onClose: () => void }) {
+export function AddBusinessModal({
+  onClose,
+  contact,
+}: {
+  onClose: () => void;
+  contact: ContactDestination;
+}) {
   const router = useRouter();
   const [businessName, setBusinessName] = useState("");
   const [category, setCategory] = useState("");
   const [city, setCity] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [blockReason, setBlockReason] = useState<CreateBusinessBlockReason | null>(null);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!businessName.trim()) {
       setError("Business name is required.");
+      setBlockReason(null);
       return;
     }
     setSaving(true);
     setError(null);
+    setBlockReason(null);
     const result = await createBusiness({ businessName, category, city });
     setSaving(false);
     if ("error" in result) {
-      setError(result.error);
+      if (result.reason) {
+        // An entitlement/subscription block — show the real upgrade/
+        // contact state, not a plain error string.
+        setBlockReason(result.reason);
+      } else {
+        setError(result.error);
+      }
       return;
     }
     onClose();
@@ -72,7 +89,13 @@ export function AddBusinessModal({ onClose }: { onClose: () => void }) {
           </div>
         )}
 
-        <div className="mt-4 flex flex-col gap-3.5">
+        {blockReason && (
+          <div className="mt-3">
+            <UpgradeContactState reason={blockReason} contact={contact} />
+          </div>
+        )}
+
+        <div className={`mt-4 flex flex-col gap-3.5 ${blockReason ? "hidden" : ""}`}>
           <Field label="Business Name" htmlFor="add-business-name" required>
             <Input
               id="add-business-name"
@@ -102,11 +125,13 @@ export function AddBusinessModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="mt-5 flex gap-2">
-          <Button type="submit" loading={saving} className="flex-1">
-            Create Business
-          </Button>
-          <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
-            Cancel
+          {!blockReason && (
+            <Button type="submit" loading={saving} className="flex-1">
+              Create Business
+            </Button>
+          )}
+          <Button type="button" variant="ghost" onClick={onClose} disabled={saving} className={blockReason ? "flex-1" : ""}>
+            {blockReason ? "Close" : "Cancel"}
           </Button>
         </div>
       </form>

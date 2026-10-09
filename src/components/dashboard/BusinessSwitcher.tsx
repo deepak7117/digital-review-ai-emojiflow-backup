@@ -5,17 +5,23 @@ import { useRouter, usePathname } from "next/navigation";
 import { setActiveBusiness } from "@/lib/business/actions";
 import type { BusinessSummary } from "@/lib/business/activeBusiness";
 import { AddBusinessModal } from "@/components/dashboard/AddBusinessModal";
+import type { ContactDestination } from "@/lib/config/contact";
+import { UpgradeContactState } from "@/components/dashboard/UpgradeContactState";
 
 export function BusinessSwitcher({
   activeBusinessId,
   businesses,
   multistoreEnabled,
   maxBusinesses,
+  subscriptionBlocked,
+  contact,
 }: {
   activeBusinessId: string | null;
   businesses: BusinessSummary[];
   multistoreEnabled: boolean;
   maxBusinesses: number;
+  subscriptionBlocked: boolean;
+  contact: ContactDestination;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -45,6 +51,16 @@ export function BusinessSwitcher({
 
   const active = businesses.find((b) => b.id === activeBusinessId) ?? businesses[0];
   const atLimit = businesses.length >= maxBusinesses;
+  // Whether there is ANY reason to offer "+ Add Business" at all — true
+  // even for an owner who currently has just one business, as long as
+  // their entitlement allows a second. Previously this case had no UI
+  // path to Add Business at all (the component returned a plain,
+  // non-interactive pill whenever businesses.length <= 1), which was a
+  // real gap: a newly-entitled single-business owner could never
+  // discover or use the feature. Fixed by making the dropdown open
+  // whenever there's more than one business OR room to add one.
+  const canOfferAdd = multistoreEnabled && !subscriptionBlocked;
+  const showDropdown = businesses.length > 1 || canOfferAdd;
 
   function selectBusiness(id: string) {
     if (id === activeBusinessId) {
@@ -60,9 +76,9 @@ export function BusinessSwitcher({
     });
   }
 
-  // Single-business owners (or multistore disabled): the same subtle,
+  // Truly nothing to switch to and nothing to add: the same subtle,
   // non-interactive pill as before — no dropdown affordance at all.
-  if (!multistoreEnabled || businesses.length <= 1) {
+  if (!showDropdown) {
     return active ? (
       <span className="hidden rounded-full bg-ink/[0.04] px-3 py-1 text-xs font-medium text-ink-soft sm:inline">
         {active.businessName}
@@ -90,9 +106,14 @@ export function BusinessSwitcher({
             role="menu"
             className="absolute left-0 mt-2 w-60 rounded-[var(--radius-md)] border border-border-strong bg-paper-raised py-1.5 shadow-lg"
           >
-            <p className="px-3.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-slate">
-              Your Businesses
-            </p>
+            <div className="flex items-center justify-between px-3.5 py-1.5">
+              <p className="font-mono text-[10px] uppercase tracking-wider text-slate">Your Businesses</p>
+              {canOfferAdd && (
+                <p className="font-mono text-[10px] text-slate">
+                  {businesses.length} / {maxBusinesses}
+                </p>
+              )}
+            </div>
             {businesses.map((b) => (
               <button
                 key={b.id}
@@ -109,11 +130,12 @@ export function BusinessSwitcher({
                 </span>
               </button>
             ))}
-            <div className="mt-1 border-t border-border pt-1">
-              {atLimit ? (
-                <p className="px-3.5 py-2 text-xs text-slate">
-                  You&rsquo;ve reached your current {maxBusinesses}-business limit.
-                </p>
+            <div className="mt-1 border-t border-border p-1.5">
+              {!canOfferAdd || atLimit ? (
+                <UpgradeContactState
+                  reason={subscriptionBlocked ? "subscription_blocked" : atLimit ? "limit_reached" : "disabled"}
+                  contact={contact}
+                />
               ) : (
                 <button
                   role="menuitem"
@@ -121,7 +143,7 @@ export function BusinessSwitcher({
                     setOpen(false);
                     setAddOpen(true);
                   }}
-                  className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-sm font-medium text-verified-dark transition-colors hover:bg-verified-tint"
+                  className="flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-2 py-2 text-left text-sm font-medium text-verified-dark transition-colors hover:bg-verified-tint"
                 >
                   + Add Business
                 </button>
@@ -130,7 +152,7 @@ export function BusinessSwitcher({
           </div>
         )}
       </div>
-      {addOpen && <AddBusinessModal onClose={() => setAddOpen(false)} />}
+      {addOpen && <AddBusinessModal onClose={() => setAddOpen(false)} contact={contact} />}
     </>
   );
 }

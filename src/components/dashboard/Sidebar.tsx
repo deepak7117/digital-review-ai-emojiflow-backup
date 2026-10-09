@@ -11,6 +11,14 @@ import type { ReactNode } from "react";
  * calls for. Same visual language throughout: no fills, rounded joins.
  */
 const icons: Record<string, ReactNode> = {
+  branches: (
+    <svg viewBox="0 0 20 20" fill="none" strokeWidth={1.5} className="h-[18px] w-[18px]">
+      <circle cx="10" cy="4" r="2" stroke="currentColor" />
+      <circle cx="4" cy="16" r="2" stroke="currentColor" />
+      <circle cx="16" cy="16" r="2" stroke="currentColor" />
+      <path d="M10 6v4M10 10L4 14M10 10l6 4" stroke="currentColor" strokeLinecap="round" />
+    </svg>
+  ),
   overview: (
     <svg viewBox="0 0 20 20" fill="none" strokeWidth={1.5} className="h-[18px] w-[18px]">
       <rect x="2.5" y="2.5" width="6.5" height="6.5" rx="1.5" stroke="currentColor" />
@@ -88,34 +96,37 @@ interface NavGroup {
   items: NavItem[];
 }
 
+/**
+ * Phase 5 regrouping — same routes, same hrefs, same enabled flags as
+ * before (zero functional change), reorganized around the product
+ * narrative (BD CLARITY intelligence surfaces / BUSINESS management /
+ * SYSTEM) per the approved sidebar structure, replacing the previous
+ * flat "Customer Experience" catch-all grouping.
+ */
 const navGroups: NavGroup[] = [
   {
-    label: "Overview",
-    items: [{ href: "/dashboard", label: "Overview", icon: "overview", enabled: true }],
-  },
-  {
-    label: "Customer Experience",
+    label: "BD Clarity",
     items: [
-      { href: "/dashboard/qr-feedback", label: "QR Feedback", icon: "qr", enabled: true },
-      { href: "/dashboard/feedback", label: "Feedback", icon: "feedback", enabled: true },
-      { href: "/dashboard/intelligence", label: "Customer Intelligence", icon: "intelligence", enabled: true },
-      { href: "/dashboard/actions", label: "Customer Actions", icon: "actions", enabled: true },
+      { href: "/dashboard", label: "Overview", icon: "overview", enabled: true },
+      { href: "/dashboard/feedback", label: "Customer Voice", icon: "feedback", enabled: true },
+      { href: "/dashboard/intelligence", label: "Intelligence", icon: "intelligence", enabled: true },
+      { href: "/dashboard/reputation", label: "Reviews", icon: "reputation", enabled: true },
+      { href: "/dashboard/actions", label: "Recommendations", icon: "actions", enabled: true },
       { href: "/dashboard/pulse", label: "Customer Pulse", icon: "pulse", enabled: true },
-    ],
-  },
-  {
-    label: "Reputation",
-    items: [
       { href: "/dashboard/analytics", label: "Analytics", icon: "analytics", enabled: true },
-      { href: "/dashboard/reputation", label: "Google Reputation", icon: "reputation", enabled: true },
     ],
   },
   {
-    label: "Workspace",
+    label: "Business",
     items: [
       { href: "/dashboard/profile", label: "Business Profile", icon: "profile", enabled: true },
-      { href: "/dashboard/settings", label: "Settings", icon: "settings", enabled: true },
+      { href: "/dashboard/branches", label: "Branches", icon: "branches", enabled: true },
+      { href: "/dashboard/qr-feedback", label: "QR Feedback", icon: "qr", enabled: true },
     ],
+  },
+  {
+    label: "System",
+    items: [{ href: "/dashboard/settings", label: "Settings", icon: "settings", enabled: true }],
   },
 ];
 

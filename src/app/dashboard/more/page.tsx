@@ -1,6 +1,14 @@
 import Link from "next/link";
 
 const icons = {
+  branches: (
+    <svg viewBox="0 0 20 20" fill="none" strokeWidth={1.5} className="h-5 w-5">
+      <circle cx="10" cy="4" r="2" stroke="currentColor" />
+      <circle cx="4" cy="16" r="2" stroke="currentColor" />
+      <circle cx="16" cy="16" r="2" stroke="currentColor" />
+      <path d="M10 6v4M10 10L4 14M10 10l6 4" stroke="currentColor" strokeLinecap="round" />
+    </svg>
+  ),
   profile: (
     <svg viewBox="0 0 20 20" fill="none" strokeWidth={1.5} className="h-5 w-5">
       <path d="M3 17V8.5L10 3l7 5.5V17" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
@@ -43,6 +51,7 @@ const icons = {
 
 const items: { href: string; label: string; description: string; icon: keyof typeof icons; enabled: boolean }[] = [
   { href: "/dashboard/profile", label: "Business Profile", description: "Your details, category and Google link", icon: "profile", enabled: true },
+  { href: "/dashboard/branches", label: "Branches", description: "Manage your business locations", icon: "branches", enabled: true },
   { href: "/dashboard/qr-feedback", label: "QR Feedback", description: "Your customer feedback QR code", icon: "qr", enabled: true },
   { href: "/dashboard/actions", label: "Customer Actions", description: "Recommended actions, prioritized", icon: "actions", enabled: true },
   { href: "/dashboard/pulse", label: "Customer Pulse", description: "Quick polls for your customers", icon: "pulse", enabled: true },

@@ -13,7 +13,7 @@ import { submitFeedback, generateDraft } from "@/app/feedback/[code]/actions";
  * still-fully-functional question-management system — it is simply never
  * rendered here anymore.
  */
-type Step = "emoji" | "generating" | "ready" | "recoveryDetail" | "recoveryThanks";
+type Step = "emoji" | "signals" | "generating" | "ready" | "recoveryDetail" | "recoveryThanks";
 
 interface EmojiOption {
   rating: number;
@@ -69,6 +69,14 @@ export function FeedbackFlow({ code, businessName, category, city, logoUrl, tags
   const [recoveryReason, setRecoveryReason] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  // Lightweight "What stood out?" multi-select — positive flow only.
+  // Reuses the SAME segment-aware tags vocabulary already used for the
+  // negative-flow recovery step; not a new/second category system.
+  const [selectedSignals, setSelectedSignals] = useState<string[]>([]);
+  // Regeneration counter — only increments on the customer's own
+  // explicit "Regenerate" tap, never automatically. See the matching
+  // comment in reviewDraft.ts's DraftInput.
+  const [attempt, setAttempt] = useState(0);
 
   function selectEmoji(selected: EmojiOption) {
     setPressedRating(selected.rating);
@@ -79,30 +87,42 @@ export function FeedbackFlow({ code, businessName, category, city, logoUrl, tags
     // emoji becomes clearly highlighted... immediately continue."
     setTimeout(() => {
       if (selected.rating >= 4) {
-        goGenerate(selected.rating);
+        setStep("signals");
       } else {
         setStep("recoveryDetail");
       }
     }, 420);
   }
 
-  function goGenerate(finalRating: number) {
+  function toggleSignal(tag: string) {
+    setSelectedSignals((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
+  }
+
+  function goGenerate(nextAttempt: number) {
     setStep("generating");
     setError(null);
     startTransition(async () => {
-      const result = await generateDraft({ code, rating: finalRating, tags: [], message: "" });
+      const result = await generateDraft({
+        code,
+        rating,
+        tags: selectedSignals,
+        message: "",
+        attempt: nextAttempt,
+      });
       if ("error" in result) {
         setError(result.error);
-        setStep("emoji");
+        setStep(nextAttempt === 0 ? "signals" : "ready");
         return;
       }
       setDraft(result.draft);
+      setAttempt(nextAttempt);
 
       // Copy immediately, as soon as the review exists — per "Review is
       // copied to clipboard -> Google opens," never deferred to the
       // button click. Graceful, non-blocking fallback on failure: the
       // "ready" screen below renders a manual Copy affordance instead of
-      // a false "✓ Copied" claim.
+      // a false "✓ Copied" claim. Re-attempted on every regeneration too
+      // — the newest draft is always the one that gets copied.
       try {
         await navigator.clipboard?.writeText(result.draft);
         setCopied(true);
@@ -128,7 +148,7 @@ export function FeedbackFlow({ code, businessName, category, city, logoUrl, tags
       const result = await submitFeedback({
         code,
         rating,
-        tags: [],
+        tags: selectedSignals,
         message: "",
         aiDraft: draft,
         finalDraft: draft,
@@ -225,6 +245,49 @@ export function FeedbackFlow({ code, businessName, category, city, logoUrl, tags
         </div>
       )}
 
+      {step === "signals" && (
+        <div className="rounded-[var(--radius-lg)] border border-border-strong bg-paper-raised p-7 shadow-lg text-center">
+          <p className="font-display text-xl font-semibold tracking-tight text-ink">What stood out?</p>
+          <p className="mt-1 text-sm text-ink-soft">Optional — pick as many as apply.</p>
+
+          {tags.length > 0 && (
+            <div className="mt-6 flex flex-wrap justify-center gap-2">
+              {tags.slice(0, 6).map((tag) => {
+                const active = selectedSignals.includes(tag);
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => toggleSignal(tag)}
+                    className={`rounded-full border-2 px-4 py-2 text-sm font-medium transition-all duration-150 active:scale-95 ${
+                      active
+                        ? "border-success bg-success text-white shadow-sm"
+                        : "border-border-strong bg-paper-raised text-ink-soft hover:border-ink/40 hover:bg-ink/[0.03]"
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <Button onClick={() => goGenerate(0)} loading={isPending} className="mt-6 w-full" size="lg">
+            Continue
+          </Button>
+          {selectedSignals.length === 0 && (
+            <button
+              type="button"
+              onClick={() => goGenerate(0)}
+              disabled={isPending}
+              className="mt-3 text-sm text-slate underline disabled:opacity-50"
+            >
+              Skip this
+            </button>
+          )}
+        </div>
+      )}
+
       {step === "generating" && (
         <div className="relative overflow-hidden rounded-[var(--radius-lg)] border border-verified/20 bg-paper-raised p-7 text-center shadow-lg">
           <div
@@ -284,6 +347,15 @@ export function FeedbackFlow({ code, businessName, category, city, logoUrl, tags
           <div className="mt-4 rounded-[var(--radius-md)] border border-verified/15 bg-verified-tint/40 p-4 text-sm leading-relaxed text-ink">
             {draft}
           </div>
+
+          <button
+            type="button"
+            onClick={() => goGenerate(attempt + 1)}
+            disabled={isPending}
+            className="mt-2 text-xs font-medium text-verified-dark underline disabled:opacity-50"
+          >
+            Regenerate
+          </button>
 
           <Button
             onClick={continueToGoogle}

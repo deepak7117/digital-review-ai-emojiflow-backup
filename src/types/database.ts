@@ -54,32 +54,6 @@ export interface Database {
       };
     };
     Functions: {
-      admin_grant_role: {
-        Args: { p_email: string; p_role: AdminRole };
-        Returns: string;
-      };
-      admin_revoke_role: {
-        Args: { p_user_id: string };
-        Returns: string;
-      };
-      admin_update_business: {
-        Args: {
-          p_business_id: string;
-          p_business_name: string;
-          p_category: string | null;
-          p_phone: string | null;
-          p_email: string | null;
-          p_address: string | null;
-          p_city: string | null;
-          p_website: string | null;
-          p_google_review_url: string | null;
-        };
-        Returns: string;
-      };
-      admin_delete_business: {
-        Args: { p_business_id: string; p_reason: string | null };
-        Returns: string;
-      };
       check_rate_limit: {
         Args: {
           p_scope: string;
@@ -753,6 +727,180 @@ export interface Database {
           id?: boolean;
           multistore_enabled?: boolean;
           max_businesses_per_owner?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      owner_entitlements: {
+        Row: {
+          id: string;
+          owner_id: string;
+          subscription_status: "active" | "expired" | "suspended" | "disabled";
+          plan_duration: "1_year" | "2_years" | "3_years" | null;
+          start_date: string | null;
+          expiry_date: string | null;
+          payment_id: string | null;
+          multi_business_enabled: boolean;
+          max_businesses: number;
+          multi_branch_enabled: boolean;
+          max_branches: number;
+          admin_notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          owner_id: string;
+          subscription_status?: "active" | "expired" | "suspended" | "disabled";
+          plan_duration?: "1_year" | "2_years" | "3_years" | null;
+          start_date?: string | null;
+          expiry_date?: string | null;
+          payment_id?: string | null;
+          multi_business_enabled?: boolean;
+          max_businesses?: number;
+          multi_branch_enabled?: boolean;
+          max_branches?: number;
+          admin_notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          owner_id?: string;
+          subscription_status?: "active" | "expired" | "suspended" | "disabled";
+          plan_duration?: "1_year" | "2_years" | "3_years" | null;
+          start_date?: string | null;
+          expiry_date?: string | null;
+          payment_id?: string | null;
+          multi_business_enabled?: boolean;
+          max_businesses?: number;
+          multi_branch_enabled?: boolean;
+          max_branches?: number;
+          admin_notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      business_branches: {
+        Row: {
+          id: string;
+          business_id: string;
+          owner_id: string;
+          branch_name: string;
+          address: string | null;
+          status: "active" | "inactive";
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          business_id: string;
+          owner_id: string;
+          branch_name: string;
+          address?: string | null;
+          status?: "active" | "inactive";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          business_id?: string;
+          owner_id?: string;
+          branch_name?: string;
+          address?: string | null;
+          status?: "active" | "inactive";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      admin_notifications: {
+        Row: {
+          id: string;
+          event_type: "business_status_changed" | "admin_role_changed" | "entitlement_changed" | "owner_password_reset";
+          title: string;
+          target_type: string | null;
+          target_id: string | null;
+          actor_admin_id: string | null;
+          metadata: Record<string, unknown> | null;
+          read_at: string | null;
+          read_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          event_type: "business_status_changed" | "admin_role_changed" | "entitlement_changed" | "owner_password_reset";
+          title: string;
+          target_type?: string | null;
+          target_id?: string | null;
+          actor_admin_id?: string | null;
+          metadata?: Record<string, unknown> | null;
+          read_at?: string | null;
+          read_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          event_type?: "business_status_changed" | "admin_role_changed" | "entitlement_changed" | "owner_password_reset";
+          title?: string;
+          target_type?: string | null;
+          target_id?: string | null;
+          actor_admin_id?: string | null;
+          metadata?: Record<string, unknown> | null;
+          read_at?: string | null;
+          read_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      communication_history: {
+        Row: {
+          id: string;
+          channel: "email" | "sms";
+          recipient: string;
+          template_type: string;
+          subject: string | null;
+          status: "queued" | "submitted" | "delivered" | "failed" | "unknown";
+          provider_name: string | null;
+          provider_ref: string | null;
+          failure_reason: string | null;
+          sent_by_admin_id: string | null;
+          target_type: string | null;
+          target_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          channel: "email" | "sms";
+          recipient: string;
+          template_type: string;
+          subject?: string | null;
+          status?: "queued" | "submitted" | "delivered" | "failed" | "unknown";
+          provider_name?: string | null;
+          provider_ref?: string | null;
+          failure_reason?: string | null;
+          sent_by_admin_id?: string | null;
+          target_type?: string | null;
+          target_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          channel?: "email" | "sms";
+          recipient?: string;
+          template_type?: string;
+          subject?: string | null;
+          status?: "queued" | "submitted" | "delivered" | "failed" | "unknown";
+          provider_name?: string | null;
+          provider_ref?: string | null;
+          failure_reason?: string | null;
+          sent_by_admin_id?: string | null;
+          target_type?: string | null;
+          target_id?: string | null;
+          created_at?: string;
           updated_at?: string;
         };
         Relationships: [];

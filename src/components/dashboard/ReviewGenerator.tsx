@@ -108,16 +108,23 @@ export function ReviewGenerator({ submissionId }: { submissionId: string }) {
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Only increments on an explicit Regenerate click — never on the
+  // first Generate, and never just from re-rendering. This is what the
+  // fixed engine actually varies on; the Phase 4 bug was that this
+  // never existed before, so every "Regenerate" silently repeated the
+  // first result.
+  const [attempt, setAttempt] = useState(0);
 
-  async function generate() {
+  async function generate(nextAttempt: number) {
     setError(null);
     setLoading(true);
-    const res = await generateForSubmission(submissionId, tone);
+    const res = await generateForSubmission(submissionId, tone, nextAttempt);
     setLoading(false);
     if ("error" in res) {
       setError(res.error);
       return;
     }
+    setAttempt(nextAttempt);
     setResult(res.data);
   }
 
@@ -173,7 +180,7 @@ export function ReviewGenerator({ submissionId }: { submissionId: string }) {
               </select>
             )}
 
-            <Button size="sm" onClick={generate} loading={loading}>
+            <Button size="sm" onClick={() => generate(result ? attempt + 1 : 0)} loading={loading}>
               {result ? "Regenerate" : "Generate"}
             </Button>
           </div>

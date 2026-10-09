@@ -1,9 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-/** The only URL of the separate admin login page. */
-const ADMIN_LOGIN_PATH = "/admin/0718/login/7117";
-
 /**
  * Refreshes the Supabase auth session on every request and enforces
  * route protection for /dashboard and /admin.
@@ -51,20 +48,33 @@ export async function updateSession(request: NextRequest) {
   // users away (like other auth routes) would block them from ever setting
   // a new password.
 
-  // The separate admin login page must be reachable while signed out.
-  const isAdminLoginRoute = path === ADMIN_LOGIN_PATH || path === `${ADMIN_LOGIN_PATH}/`;
-
-  if (!user && isProtectedRoute && !isAdminLoginRoute) {
+  if (!user && isProtectedRoute) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/login";
-    if (path.startsWith("/admin")) {
-      // Don't reveal the admin login URL — send signed-out visitors of
-      // /admin/* to the normal login without a redirectTo hint.
-      redirectUrl.search = "";
-    } else {
-      redirectUrl.searchParams.set("redirectTo", path);
-    }
+    redirectUrl.searchParams.set("redirectTo", path);
     return NextResponse.redirect(redirectUrl);
+  }
+
+  // Admin MFA step-up: only enforced for /admin, and only when the
+  // user actually has a verified TOTP factor enrolled — an admin who
+  // hasn't enrolled is never blocked by this (optional-but-enforced-
+  // once-enrolled, not a mandatory gate on every admin regardless of
+  // whether they've set it up). /admin/mfa-challenge and /admin/security
+  // are excluded so the admin can actually reach the challenge/enrollment
+  // pages themselves.
+  if (
+    user &&
+    path.startsWith("/admin") &&
+    !path.startsWith("/admin/mfa-challenge") &&
+    !path.startsWith("/admin/security")
+  ) {
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aal && aal.nextLevel === "aal2" && aal.currentLevel !== "aal2") {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/admin/mfa-challenge";
+      redirectUrl.searchParams.set("redirectTo", path);
+      return NextResponse.redirect(redirectUrl);
+    }
   }
 
   if (user && isAuthRoute) {

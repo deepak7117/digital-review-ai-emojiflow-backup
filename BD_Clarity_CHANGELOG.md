@@ -32,6 +32,415 @@ The product's working name changed from "BD Voice" to "BD Clarity" — the actua
 
 **All other audit items: confirmed clean.** See the full report delivered in conversation for the complete 12-point breakdown, file/database-object inventory, and manual testing checklist.
 
+## v3.13 — Super Admin: Batch C (Communications Foundation) + Consolidated Readiness Audit
+
+**Status: safe scaffolding complete, no live delivery claimed anywhere. One migration.**
+
+**Files changed (7):** `0024_communication_history.sql`, `lib/communication/provider.ts`, `communicationActions.ts`, `communications/page.tsx`, `CommunicationCenter.tsx` (new); `admin/layout.tsx`, `types/database.ts` (modified).
+
+**Audit confirmed first:** zero provider integration, template system, or send-history table existed anywhere. The existing `contact.ts` is static `wa.me`/`mailto` links that open the *admin's own* client — never a server-side send — confirmed distinct from what this batch builds.
+
+**Provider abstraction, deliberately vendor-agnostic:** no SDK installed, no paid dependency added — a real implementation only needs `fetch()` once a vendor is actually chosen, which hasn't happened. `getEmailProvider()`/`getSmsProvider()` return an honest `NotConfiguredProvider` whenever `EMAIL_PROVIDER_API_KEY`/`SMS_PROVIDER_API_KEY` are unset — confirmed empirically (not just by reading the code) that both report `not_configured` with a clear reason.
+
+**Honest status model, enforced at the data layer, not just by convention:** `communication_history.status` only allows `queued | submitted | delivered | failed | unknown`. No code path anywhere sets `delivered` without a genuine provider signal — a `not_configured` result from the provider is recorded as a real `failed` row with its true reason, never silently upgraded toward success.
+
+**A real security inconsistency caught and fixed before shipping:** the first draft's RLS wrote/updated `communication_history` under the general `is_admin()` check (any of the 4 roles), unlike the stricter `get_admin_role() = 'super_admin'` policy already used for comparably sensitive tables (`owner_entitlements`, `admin_role_assignments`). This would have let a `support_admin` insert/update send records directly, bypassing the application layer's super_admin-only gate entirely. Caught during testing — re-tested directly: a `support_admin` write attempt now correctly fails at the RLS layer (`support_admin` can still *read* history, matching the broader read pattern used throughout this project).
+
+**Rate limiting:** reused `check_rate_limit()` again (10 sends per 10 minutes, platform-wide) — tested precisely, 10 allowed/11th blocked.
+
+**Recipient masking:** history list uses the existing `maskEmail()`/`maskPhone()` from Batch D directly — not reimplemented.
+
+**Typecheck/Lint/Build:** all PASS — **33 routes, correctly +1** (`/admin/communications`).
+
+**Browser/device verification: NOT PERFORMED.**
+
+---
+
+### Consolidated Final Readiness Audit
+
+| Requirement | Status |
+|---|---|
+| Admin management (CRUD, roles, self/last-admin protection) | **Verified in repository/tests** |
+| Owner search, pagination, status filter, detail | **Verified in repository/tests** |
+| Business status controls + authorization | **Verified in repository/tests** |
+| Owner credential recovery | **Verified in repository/tests** (code/security); delivery **Blocked by configuration** (no live Supabase project) |
+| Entitlement management | **Verified in repository/tests** |
+| Admin notifications | **Verified in repository/tests** |
+| Immutable audit logs | **Verified in repository/tests**, re-confirmed every batch |
+| RBAC / capability enforcement | **Verified in repository/tests** |
+| MFA (TOTP) | **Verified in repository/tests** (code against real Supabase API type definitions); **Blocked by configuration** — needs a live project with MFA enabled in the dashboard |
+| Login rate limiting | **Verified in repository/tests** |
+| Session revocation (force-logout another session) | **Partial** — code path exists (service-role `signOut(userId, 'global')`), **Blocked by configuration** |
+| Communication delivery (email/SMS) | **Missing** (by design) — scaffolding only; **Blocked by configuration**, no provider chosen or credentialed |
+| Privacy / data masking | **Verified in repository/tests** |
+| Responsive UI | **Verified at code level**; **not verified against a live external service or browser** |
+| Migrations | **Verified in repository/tests** — 24 migrations, all applied and tested against a local Postgres instance; **never applied to any staging/production database** |
+| Deployment | **Missing** — this project has never been deployed anywhere |
+
+**Verified against a live external service: none, for any requirement.** Every verification in this entire Super Admin effort was performed against a local Postgres instance and direct code inspection — no real Supabase project, email/SMS provider, or browser has ever been exercised.
+
+**Exact remaining actions to launch safely:**
+1. Provision a real Supabase project; configure `SUPABASE_SERVICE_ROLE_KEY` and enable MFA in the Auth dashboard.
+2. Choose and configure a real email/SMS provider; implement the real `fetch()` call in `provider.ts` (the interface is ready; the vendor call is not).
+3. Apply all 24 migrations to that real project and verify against real data.
+4. Perform actual browser/device verification — nothing in this entire effort has been visually confirmed.
+5. Deploy, and verify session/logout/rate-limiting behavior against the real, deployed service.
+
+**The platform is not production-ready.** This is stated plainly, not as a hedge — every piece of this work is sound at the code and local-database level, and none of it has been exercised against the real services it will ultimately depend on.
+
+## v3.12 — Super Admin: Batch B (Authentication Security, MFA, Rate Limiting)
+
+**Status: the safely-buildable majority complete. No migration.**
+
+**Files changed (8):** `login/rateLimitActions.ts`, `admin/mfaActions.ts`, `admin/security/page.tsx`, `MfaEnrollmentPanel.tsx`, `admin/mfa-challenge/page.tsx` (new); `login/page.tsx`, `admin/layout.tsx`, `lib/supabase/middleware.ts` (modified).
+
+**Key finding that shaped this batch:** Supabase Auth has native TOTP MFA (`auth.mfa.*`) requiring **zero external SMS/email provider** — a genuine second factor (something you have: an authenticator app), explicitly distinct from email-based recovery (same inbox as login, not a separate factor) per the instruction's own caution. This made real MFA buildable here, unlike SMS/email-based approaches.
+
+**Login rate limiting**: reused the existing `check_rate_limit()` Postgres function directly — already database-backed (a shared table, not an in-memory counter), so this is correct across multiple application instances without any new infrastructure. Two independent buckets (IP-hash and email), both must pass. **Tested precisely**: 5 attempts allowed, 6th blocked, a different email unaffected — confirmed against real Postgres.
+
+**Admin TOTP MFA**: enrollment (QR code + manual key), verification, and self-service removal, all via Supabase's real, officially-documented Admin/Auth API methods — verified these aren't hallucinated by reading the actual type definitions in `node_modules`, not assumed. Middleware enforces step-up to AAL2 for `/admin` **only when a verified factor actually exists** — an admin who hasn't enrolled is never blocked; this is optional-but-enforced-once-enrolled, not a mandatory gate imposed on everyone regardless of setup.
+
+**Last-Super-Admin MFA lockout recovery**: `recoverLockedOutAdminMfa()` — requires a *different*, currently-authenticated super_admin and the service-role client (self-recovery is impossible by definition once locked out). Mirrors the exact pattern already established for `createAdmin()` in Milestone A: code-complete and correct, **live execution blocked** on `SUPABASE_SERVICE_ROLE_KEY`, which remains unconfigured in this sandbox — reported as Blocked, not simulated.
+
+**Safe error messages, re-verified not newly added**: confirmed by reading the actual code that login ("Incorrect email or password") and forgot-password (identical response regardless of account existence, with an explicit code comment stating that intent) already avoid account enumeration — this was true before this batch, not a new fix.
+
+**Audit events**: `admin_mfa_enrolled`, `admin_mfa_removed`, `admin_mfa_recovery` — tested exact insert shapes against real Postgres, and specifically confirmed **zero rows anywhere in `audit_logs` contain a secret or code value** — only the fact that an enrollment/removal/recovery happened, never the TOTP secret or any 6-digit code.
+
+**Explicitly separated, as required:**
+1. **Repository checks that passed**: rate-limit boundaries (real Postgres), audit event shapes (real Postgres), capability gating logic, typecheck/lint/build, full regression.
+2. **Real Supabase/provider tests that passed**: none — no live Supabase project exists in this sandbox.
+3. **External configuration still required**: `SUPABASE_SERVICE_ROLE_KEY` (blocks live admin MFA recovery, same as admin invites since Milestone A); MFA must additionally be enabled as a project-level setting in the Supabase dashboard (Authentication → MFA) before enrollment will work for real users.
+4. **Deployment/browser/device verification**: not performed — no such tooling exists in this environment, and this project has never been deployed anywhere.
+
+**Preserved, confirmed unchanged:** signup flow, business-activation policy, no owner-approval gate, all 4 existing admin roles and the capability matrix, immutable audit-log model (re-verified).
+
+**Typecheck/Lint/Build:** all PASS — **32 routes, correctly +2** (`/admin/security`, `/admin/mfa-challenge`).
+
+**The platform is not production-ready.** MFA enforcement cannot be exercised against a real provider here; Batch C (SMS/email) remains entirely outstanding; no deployment has occurred.
+
+## v3.11 — Super Admin: Batch D (UI Completeness, Privacy, Production-Readiness Review)
+
+**Status: complete. No migration, no new route — presentation/privacy fixes to existing surfaces only.**
+
+**Files changed (4):** `lib/admin/mask.ts` (new); `OwnerSearchPanel.tsx`, `admin/businesses/page.tsx`, `ownerAuthActions.ts` (modified).
+
+**Masking, applied with a documented, task-based distinction — not blanket, not absent:**
+- **Masked**: owner email in both list-scan contexts that exist — `OwnerSearchPanel`'s results and the admin `businesses` list page (confirmed via code that it previously showed the full address in a many-row scan view).
+- **Deliberately left unmasked**: the single-owner detail page (`/admin/owners/[id]`) and the single-business detail page — both single-item views where the full address is genuinely needed (the password-reset action requires the real address to function; identifying whose business you're looking at requires it too). Admin-to-admin emails in Admin Management stay unmasked — an internal-staff tool, a different privacy calculus than customer/owner data.
+- **Phone numbers**: only one phone field exists anywhere in this schema (`businesses.phone`, a business's own contact number) — reviewed and deliberately left unmasked, since it's typically public information a business itself advertises, shown only in a single-item detail view, not a scan.
+- A masking utility (`lib/admin/mask.ts`) was built once and empirically tested against edge cases (short local-parts, non-email strings, null, short phone numbers) rather than inlined ad hoc in each place it's used.
+
+**A real inconsistency found and fixed:** the password-reset notification's *title* embedded the full owner email — but that title only ever surfaces in the shared notification list (a scan view, readable by any admin role), with no separate "notification detail" screen that would justify the full address. Fixed at the point the title is written, not just where it's displayed. The audit log keeps the full email deliberately — it's a per-admin, access-controlled security record, not a broadcast feed, and investigating a specific action genuinely needs it.
+
+**Confirmation dialogs, re-verified rather than assumed:** business status changes, admin role changes/revocation, and the new password-reset action all confirmed to have genuine two-step confirm/cancel flows, not single-click destructive actions.
+
+**Responsive layout, re-verified at the code level:** the business list table already wrapped in `overflow-x-auto`; `OwnerSearchPanel`'s result cards already `flex-col` on narrow screens, `sm:flex-row` above — both confirmed already correct, not newly added.
+
+**Regression:** full suite re-run, including a specific re-confirmation that `audit_logs` immutability holds even against a mass-update attempt by `super_admin` (`UPDATE 0`).
+
+**Typecheck/Lint/Build:** all PASS — 30 routes, unchanged.
+
+**Browser/device verification: NOT PERFORMED.**
+
+---
+
+### Master Checklist (against the original Super Admin specification, updated through Batch D)
+
+| Area | Status |
+|---|---|
+| Admin dashboard / real metrics | **Verified** |
+| Owner search, pagination, status filter, detail | **Verified** |
+| Account-status actions + authorization | **Verified** (business-level; no owner-level approval gate, by explicit decision) |
+| Owner credential recovery | **Verified** (code/security layer); delivery **blocked by external configuration** (no live Supabase project in this environment) |
+| Subscription/entitlement management | **Verified** |
+| Communication history / delivery-state | **Not implemented** — no provider exists (Batch C) |
+| Admin notifications / immutable audit logs | **Verified**, including event-type accuracy and masking fixes this batch |
+| RBAC / server-side capability enforcement | **Verified** |
+| Search/filter/pagination/empty/loading/error states | **Verified** |
+| Responsive layout | **Verified at code level**; visual/browser **not performed**, consistently, throughout |
+| Privacy-sensitive data display | **Verified**, masking applied with documented reasoning |
+| OTP/2FA / session security / login rate limiting | **Not implemented** (Batch B) |
+| SMS/email sending | **Not implemented**, blocked on provider credentials (Batch C) |
+| Environment config / deployment readiness | **Not established** — this project has never been deployed; `SUPABASE_SERVICE_ROLE_KEY` and any SMS/email provider remain unconfigured in this environment |
+
+**The system is not fully production-ready.** Batches B and C remain outstanding, and deployment itself has never occurred.
+
+## v3.10 — Super Admin: Batch A Complete (Credential Recovery) + Owner Approval Policy Decision
+
+**Status: Batch A now complete. One small migration (CHECK constraint extension only, no new table).**
+
+**Partner decision recorded:** no mandatory pre-approval gate for owner signups at this stage — existing signup/authentication flow, business activation controls, and owner isolation all explicitly preserved unchanged. Business status is not represented as owner approval status, and no fake pending/rejected states were introduced. If an approval workflow is needed later, it will be designed as a separately configurable feature with its own migration, recovery path, and tests — not retrofitted here.
+
+**Credential recovery, built on Supabase's own flow entirely:** `initiateOwnerPasswordReset()` calls `supabase.auth.resetPasswordForEmail()` — the exact same built-in mechanism already powering this product's own "forgot password" page. BD Clarity never generates, stores, views, or transmits a token or password at any point; Supabase manages the entire recovery lifecycle internally. No service-role client needed — this is a public Supabase Auth method by design.
+
+**A real mistake caught and fixed before shipping, not after:** the first draft mislabeled this event as `admin_role_changed` when wiring it into notifications, reusing an existing type that doesn't actually describe what happened. Caught on review and fixed properly — migration `0023` adds a genuinely new `owner_password_reset` event type to the existing `admin_notifications` CHECK constraint, rather than force a dishonest label onto a real event.
+
+**Security:** gated to `manage_admin_roles` (super_admin only, confirmed via the real `PERMISSION_MATRIX` — none of the other 3 roles have it); the target email is resolved against `profiles` first, so this action can't be used to probe arbitrary addresses for account existence; the audit log records the request (actor, target owner, outcome) and explicitly never a token or password, since BD Clarity never possesses either.
+
+**Honest limitation, consistent with every prior external-service finding in this project:** real email delivery cannot be tested in this sandbox (no live Supabase project configured). The action's error handling follows the same established pattern as every other Supabase call here — network/API failures are returned as a result, not thrown — so a misconfigured environment fails gracefully with a reported error, not a crash. The UI explicitly states delivery isn't independently verifiable here rather than implying success.
+
+**Files changed (7):** `0023_admin_notification_password_reset_event.sql`, `ownerAuthActions.ts`, `OwnerPasswordResetButton.tsx` (new); `notificationActions.ts`, `owners/[id]/page.tsx`, `NotificationCenter.tsx`, `types/database.ts` (modified).
+
+**Tests:** email-existence resolution (real owner found, nonexistent email correctly returns nothing), exact audit-write shape confirmed, capability gating re-confirmed against the real matrix, new/old notification event types both accepted post-migration, invalid types still rejected. Full regression (businesses, branches, entitlements, feedback, admin role, notifications, public page) — all passed.
+
+**Typecheck/Lint/Build:** all PASS — 30 routes, unchanged.
+
+**Browser/device verification: NOT PERFORMED.**
+
+## v3.9 — Super Admin: Batch A (Customer/Owner Lifecycle) — Partial
+
+**Status: the safely-scoped majority of Batch A complete. No migration.** A full gap audit against the master prompt preceded this batch — see conversation record for the complete 14-area table. One consequential design decision (a mandatory pre-approval gate on owner signup) deliberately **not** implemented — flagged for explicit decision rather than silently built, since it would change existing signup behavior for every new owner.
+
+**Files changed (3):** `platformIntelligenceActions.ts`, `OwnerSearchPanel.tsx`, `admin/owners/[id]/page.tsx`.
+
+**Owner search: real pagination and status filtering added** — confirmed via code that `searchOwners()` previously had neither. Pagination applied in-process after resolving the owner set (not SQL OFFSET/LIMIT), a deliberate, explained choice given the full set already has to be resolved to compute per-owner business/branch counts.
+
+**A real UX gap closed:** the owner detail page's entitlement section was read-only, linking away to a *business* page to actually edit the same owner's entitlement. Now embeds the existing `OwnerEntitlementPanel`/`upsertOwnerEntitlement()` directly — not a second entitlement editor, the exact same Phase 1 component and action, reachable from one more place. Confirmed live that editing from this new location still works correctly end to end.
+
+**Tests:** pagination and status-filter logic verified against ground-truth data (2 owners, 1 with an `active` entitlement row); entitlement editing re-confirmed from the new embed point; full regression (businesses, branches, entitlements, feedback, admin role, notifications, public page, cross-owner isolation) — all passed.
+
+**Typecheck/Lint/Build:** all PASS — 30 routes, unchanged.
+
+**Browser/device verification: NOT PERFORMED.**
+
+**Deliberately not implemented, pending decision:** owner-level pending/approval/rejection workflow (would require changing the actual signup flow, not just admin tooling); admin-initiated credential recovery; a dedicated "extend by N days" shortcut (the entitlement panel already supports setting any expiry date directly).
+
+## v3.8 — Super Admin Enhancement, Milestone C: Admin Notifications
+
+**Status: complete and verified. One migration (new table, no existing table changed).**
+
+**Files changed (9):** `0022_admin_notifications.sql`, `admin/notificationActions.ts`, `admin/notifications/page.tsx`, `NotificationCenter.tsx` (new); `admin/admins/actions.ts`, `admin/businesses/actions.ts`, `admin/entitlementActions.ts`, `admin/layout.tsx`, `types/database.ts` (modified).
+
+**Audit confirmed:** `owner_notifications` (0014) is a genuinely useful reference pattern — lean payload referencing the real event, simple `read_at` — but is architecturally owner-scoped and cannot be reused directly for platform-wide admin events. Zero admin-facing notification infrastructure existed anywhere. One new table, `admin_notifications`.
+
+**Deliberate design decision, documented rather than silent: a shared inbox, not per-admin unread state.** `read_at`/`read_by` are set once by whichever admin reads a notification first, visible to all — the simplest correct design for a first version; confirmed live that one role (`support_admin`) marking a notification read is visible to every other role, by design.
+
+**Two honestly distinct mechanisms, not one conflated system:**
+- **Event-driven, stored**: hooked into the three real existing actions — `setBusinessStatus()`, `changeAdminRole()`/`revokeAdmin()`/`restoreAdmin()`, and `upsertOwnerEntitlement()` — each firing only *after* the real action already succeeded, and each failing silently if the notification write itself errors (never blocks the real action).
+- **Expiry notifications: computed live, never stored.** No cron/worker/scheduler exists in this project and none was introduced — "scheduled delivery" is not claimed anywhere, since it was never implemented or tested. Instead, expiring/expired entitlements are recomputed fresh from `owner_entitlements.expiry_date` on every page load, the same pattern already used for Milestone B's dashboard metrics.
+
+**Deduplication, the real mechanism, not just absence of literal duplicate rows:** `upsertOwnerEntitlement()` now fetches the existing row *before* writing and only creates a notification when subscription status, business limit/toggle, or branch limit/toggle actually changed — confirmed live in both directions: an identical re-save produces no notification, a real change does.
+
+**Security, tested against real data:** all 4 admin roles confirmed able to read; a plain business owner confirmed blocked entirely; `anon` blocked; `audit_logs` immutability re-confirmed unaffected (a direct `DELETE` attempt on the whole table returned `DELETE 0`).
+
+**Typecheck/Lint/Build:** all PASS — **30 routes, correctly +1** for `/admin/notifications`.
+
+**Browser/device verification: NOT PERFORMED.** No such tooling exists in this environment — consistent with every prior milestone.
+
+**Not implemented, per the explicit scope boundary:** owner approval/onboarding, 2FA/OTP, SMS/email/WhatsApp delivery, new RBAC/audit systems, customer-facing changes, unrelated dashboard redesigns.
+
+## v3.7 — Super Admin Enhancement, Milestone B: Platform Intelligence + Owner-Centric Management
+
+**Status: complete and verified. No migration — confirmed entirely achievable with existing schema.**
+
+**Files changed (5):** `admin/platformIntelligenceActions.ts` (new), `OwnerSearchPanel.tsx` (new), `admin/owners/[id]/page.tsx` (new); modified `admin/page.tsx`, `admin/entitlementActions.ts`.
+
+**A real gap found and fixed first, before building anything new:** `upsertOwnerEntitlement()` (Phase 1) never wrote to `audit_logs` — confirmed by grep, zero matches. Fixed with one `writeAuditLog()` call, reusing the exact existing function every other admin action already uses. Historical entitlement changes from before this fix were never logged and are **not** retroactively fabricated — the Activity section only shows what was genuinely recorded, which for entitlement changes begins now.
+
+**Platform Intelligence:** extends the existing `/admin` dashboard in place — Total Owners, Active/Total Businesses, Active/Total Branches, Multi-Business/Multi-Branch Owner counts, and entitlement status breakdown (active/expired/suspended/disabled/not-configured) with dynamic 7-day and 30-day expiry windows. Every number traced to one specific query over `businesses`/`business_branches`/`owner_entitlements` — none invented. **Verified against independently-computed ground-truth SQL**, not just code review: total owners (2), businesses (5/5 active), branches (4 total/3 active), multi-business owners (1), multi-branch owners (1) — all matched exactly. Expiry-window boundary logic specifically tested at 3 days (within both windows) and 20 days (within 30 only) against real data, then restored.
+
+**Owner-centric management:** new `OwnerSearchPanel` (name/email/business-name search, resolving to the *owner*, never a flat business list) and `/admin/owners/[id]` detail page — Overview, Subscription/Entitlement (reuses `getOwnerEntitlementSummary()` from Phase 1 directly, not a re-implementation), Businesses with per-business branch counts, and Activity (scoped via `audit_logs.target_type`/`target_id`, limited to the most recent 20 — not the full history). Owner → Business → Branch hierarchy preserved throughout; a branch is never shown as if it were a business.
+
+**Security, explicitly re-tested for this new surface:** a plain business owner (zero `admin_role_assignments` row) is rejected immediately by every new action; `owner_entitlements` RLS independently blocks a non-admin from reading another owner's row even bypassing the application check entirely; `read_only_analyst` confirmed able to read (by design — `view_dashboard` is granted broadly) with no mutation path anywhere in this milestone's new code (everything added is read-only); `anon` fully blocked; `audit_logs` immutability re-confirmed for the new `entitlement_update` event type specifically (a direct UPDATE attempt by `super_admin` itself returned zero rows affected).
+
+**Performance:** owner search and detail use batched `Promise.all` queries selecting only required columns — no N+1, no full-table loads; activity capped at 20 rows.
+
+**Typecheck/Lint/Build:** all PASS — **29 routes, correctly +1** for `/admin/owners/[id]`.
+
+**Browser/device verification: NOT PERFORMED.** No such tooling exists in this environment.
+
+**Not implemented, per the explicit scope boundary:** admin notifications, approval/pending-owner workflow, 2FA/OTP, SMS, any new RBAC/audit/subscription architecture, Owner Dashboard changes.
+
+## v3.6 — Super Admin Enhancement, Milestone A: Admin Management UI
+
+**Status: complete and verified. One new migration (a safeguard trigger only, no new table). Platform dashboard, owner-centric management, admin notifications, approval workflow, and 2FA explicitly deferred to separate milestones, per the approved scope.**
+
+**Files changed (9):** new migration `0021_last_super_admin_protection.sql`, `lib/supabase/adminClient.ts`, `lib/admin/roleLabels.ts`, `admin/admins/{actions.ts,page.tsx,[id]/page.tsx}`, `AdminManagementTable.tsx`; modified `lib/admin/permissions.ts` (re-exports the extracted label constant, adds `ALL_CAPABILITIES`), `admin/layout.tsx` (one nav link).
+
+**Confirmed, before writing any code, exactly what already existed:** the entire RBAC layer — 4 roles, the capability matrix, `hasCapability()`, `admin_role_assignments` with soft-revoke/`granted_by`, and a **database-level self-escalation trigger** already rejecting any attempt to touch one's own role — all solid, all reused unchanged. What was genuinely missing, confirmed by an empty grep across the whole codebase: any UI at all to view, create, or manage admins, and any protection against removing the last Super Admin.
+
+**Migration:** one trigger function on the existing `admin_role_assignments` table (no new table) — blocks any UPDATE that would leave zero active `super_admin` rows, regardless of actor, complementing (not replacing) the existing self-escalation trigger. Tested live in all 3 required directions: revoking the sole Super Admin blocked, demoting them away from the role also blocked, revoking one of *two* Super Admins correctly succeeds.
+
+**Secure admin creation — the explicit Step 3 requirement, resolved correctly, not worked around:** no admin-creation flow existed. Rather than build a parallel password system (explicitly forbidden), built the one new piece of infrastructure this requires — a minimal service-role Supabase client, using `SUPABASE_SERVICE_ROLE_KEY`, an env var this project has *documented as required since Module 1* but never once wired into code. Used for exactly one call: Supabase's own native `inviteUserByEmail()` — BD Clarity's own code never generates, stores, or sees a password at any point.
+
+**A real, consequential bug found and fixed through actual testing, not caught by inspection alone:** my first implementation wrote the new admin's `profiles.role` through the normal, RLS-respecting server client. Testing the exact sequence against live Postgres showed this fails with a genuine RLS violation — `profiles` has no admin-write policy at all (self-update only), and the row-creating trigger (`handle_new_user()`, confirmed by reading its actual body) always assigns the column default role (`business_owner`), never `admin`. Fixed by routing specifically this one write through the service-role client — every other write in the same flow (`admin_role_assignments`, `audit_logs`) correctly stays on the normal client, since those tables already have real super_admin-write policies, confirmed by reading the actual policy definitions. Re-verified the corrected sequence end-to-end afterward.
+
+**A second real bug, caught by the build itself:** the client-side admin table initially imported `ADMIN_ROLE_LABELS` directly from the server-only `permissions.ts`, which Next.js's build correctly rejected (`"server-only" cannot be imported from a Client Component`). Fixed by extracting the plain-data constant into its own small file with no server-only dependency, re-exported from `permissions.ts` so every existing server-side import keeps working unchanged.
+
+**Capabilities shown in the admin detail view** are derived directly from the existing capability matrix (`ALL_CAPABILITIES`, computed from the matrix itself) — not a second, hand-maintained permission calculation.
+
+**A third small cleanup, caught on review:** `getAdminDetail()` originally pulled in `ALL_CAPABILITIES` via an unnecessary dynamic `import()`, even though `permissions.ts` was already statically imported at the top of the same file for everything else. No functional bug — just folded into the existing static import for consistency.
+
+**Tests, all live, including a full second pass specifically verifying RLS enforces this independent of the application layer, not just that the capability gate exists in code:**
+- The 3-direction last-Super-Admin trigger test, isolated via the raw superuser connection (bypassing RLS/self-escalation entirely) to prove it's a genuine, unconditional row-level constraint — then re-confirmed through the real authenticated-session path (two Super Admins seeded; revoking one succeeds, revoking the resulting sole remainder fails).
+- Self-escalation re-confirmed through the real session context (a Super Admin modifying their own row, not just the raw trigger test from before).
+- The full create→role-change→revoke→access-lost→restore→access-regained→history-intact chain, confirmed via `get_admin_role()` genuinely losing and regaining access (not just a flag), with exactly one historical row throughout — never duplicated.
+- **Three separate non-super_admin roles — `support_admin`, `read_only_analyst`, `operations_admin` — each seeded as real test users and each attempting a direct, unauthorized database write bypassing the server action entirely** (self-promotion, revoking another admin, escalating their own role): all three rejected with `UPDATE 0`, confirmed via the actual `pg_policies` definitions on `admin_role_assignments` (`get_admin_role() = 'super_admin'` required for both INSERT and UPDATE) — genuine RLS-level defense-in-depth, not reliant solely on the `hasCapability()` application check.
+
+**One test-process artifact caught and explained, not left unexplained:** a rate-limiter regression check initially returned an unexpected result for a specific key string; isolated with a guaranteed-fresh key (which passed correctly) and confirmed this was simply a collision with the same key string reused across turns in this long-running session — not a product regression, and unrelated to anything built in this milestone.
+
+**Confirmed NOT testable in this environment:** `SUPABASE_SERVICE_ROLE_KEY` is not configured here (confirmed directly) — the real invite-email call cannot be exercised live, consistent with every other external-service dependency throughout this project (Google OAuth, AI providers). What *is* verified: the code correctly detects this and returns an honest, specific error rather than attempting an insecure fallback or crashing.
+
+**Typecheck/Lint/Build:** all PASS — **28 routes, correctly +2** for `/admin/admins` and `/admin/admins/[id]`.
+
+**Browser/device verification: not performed.**
+
+**Known limitation:** full "Create Admin" live testing requires a real `SUPABASE_SERVICE_ROLE_KEY` in production — the code path is correct and defensively handles its absence, but the actual email delivery and Supabase-hosted set-password flow have not been exercised against a real Supabase project.
+
+## v3.5 — Phase 6: Final Integration Regression
+
+**Status: complete. Pure verification milestone — confirmed zero files changed. No migration, no new code, nothing to roll back.**
+
+**Identified correctly from the changelog itself, not from memory** — every prior Phase 1–5 entry consistently documented Phase 6 as the next, not-yet-started step from the original Master Implementation Plan.
+
+**SUPER ADMIN chain, all live:** email search resolves the correct owner, the full entitlement panel data (status/duration/dates/payment ID/business+branch entitlement) reads back exactly as stored, activate/suspend/reactivate cycle confirmed, existing business status control re-confirmed working.
+
+**OWNER chain, all live:** correct entitlement loads for the authenticated owner; at-limit business creation correctly blocked (4 of 4); branch creation correctly reflects real current state (3 active after earlier test history, correctly allowing one more rather than a hardcoded assumption); the allowed-case re-confirmed for an owner with no entitlement row, correctly falling back to the platform default.
+
+**CUSTOMER chain, all live, including real multi-signal combinations:** QR→business resolution confirmed; the real generator run against 4 different rating+signal combinations including a genuine multi-signal case (Staff Behaviour + Cleanliness together) — all grounded correctly, zero fabrication; Regenerate confirmed to produce different text while preserving both signals in the multi-signal case specifically.
+
+**OWNER-again chain:** a final, full-codebase sweep confirms **zero pages regressed** to the old single-business lookup pattern across all 5 phases of work — only the 4 expected, intentional matches remain, unchanged from every prior phase's own sweep. Owner reply generation re-verified across all 4 real tones (`professional`, `friendly`, `premium`, `warm`) plus regeneration.
+
+**One real mistake caught mid-test, not hidden:** an initial owner-reply test used `"formal"` as a tone, which crashed — traced immediately to confirm this was a test-script error (the real, valid tone set is `professional | friendly | premium | warm`, and the actual production calling code already validates against this exact list before ever reaching the generator) — not a production vulnerability. Re-ran correctly; all passed.
+
+**SECURITY REGRESSION — a genuine anomaly investigated, not glossed over:** a comprehensive sweep across 8 data surfaces (businesses, branches, entitlements, feedback submissions, Google connections, Google reviews, feedback links, owner notifications) found `feedback_links` returning a non-zero count for a cross-owner query, unlike every other table. Investigated by reading the actual RLS policy rather than assuming either a bug or a non-issue: confirmed this is a deliberate, documented Module 2 design — `feedback_links` intentionally has a `TO anon, authenticated USING (is_active = true)` policy, because this table only ever holds non-sensitive QR metadata (public code, tags) and nothing readable there enables any access to another owner's actual data. Confirmed by reading the table's real schema (7 columns, nothing sensitive). A direct ID-manipulation attempt against `businesses` itself (an "owner B tries to rename owner A's business" probe) was correctly rejected (`UPDATE 0`).
+
+**Typecheck/Lint/Build:** all PASS — 26 routes, unchanged, zero files modified.
+
+**Browser/device verification: not performed.** The Phase 5 visual pass, performed separately, remains the only outstanding item requiring human eyes — this phase verified the underlying system end-to-end at the data/code layer, which is the full extent of what's achievable in this environment.
+
+## v3.4 — Phase 5: Owner Dashboard Redesign (Listen → Understand → Insight → Act)
+
+**Status: complete and verified. No migration, no functional change — presentation layer only. Phase 6 not started.**
+
+**Files changed (3):** `DashboardHeroCards.tsx` (desktop), `mobile/MobileHome.tsx`, `Sidebar.tsx`.
+
+**Information architecture rebuilt around the approved narrative**, on both mobile and desktop: LISTEN (Customer Voice) → UNDERSTAND (AI Customer Intelligence, the same sentiment data now explicitly framed as BD Clarity's own understanding rather than a raw second data table) → INSIGHT (Experience Score, now the visually dominant hero element rather than one of six equal-weight tiles) → ACT (Needs Attention + AI Recommendation).
+
+**A real consistency gap found and fixed, not invented to pad this entry:** the desktop dashboard previously split "Needs Attention" and "AI Recommendation" into two separate cards, even though they're the same underlying `topAction` object — duplicating the same recommendation as if it were two different insights. Mobile had already been corrected for exactly this in an earlier Visual Identity milestone; desktop had not. Fixed to match — shown once, truthfully.
+
+**A real bug caught and fixed before it ever ran, not after:** while building the new Experience Score hero ring, I initially constructed Tailwind class names dynamically (`` `stroke-${tone}` ``, `` `text-${tone}-dark` ``). Tailwind's build-time scanner can't see through dynamically-built class strings, so this would have silently compiled with **no color applied at all** — caught by reasoning through how Tailwind's JIT actually works, not by seeing it fail, and replaced with a static lookup table before it was ever tested or shipped.
+
+**Sidebar regrouped**, per the approved structure (BD Clarity / Business / System) — confirmed **zero changes to any href or `enabled` flag**; this is pure relabeling and regrouping of the exact same 10 routes, not a functional change.
+
+**Top bar / BusinessSwitcher:** confirmed already satisfies the requirement via existing, already-tested infrastructure (the switcher slot and profile controls were built in the Multi-Store and earlier milestones) — deliberately left unchanged rather than risking a working, tested component for no functional gain.
+
+**Zero-data state rebuilt**, per the explicit requirement: "Your Customer Intelligence is ready" with a Listen/Understand/Act preview grid, replacing the previous plain "waiting" message — still uses only real counts (`currentFeedbackCount`/`neededCount`), never a fabricated number.
+
+**Confirmed untouched and fully regression-tested:** the entire underlying product engine — Multi-Business (4 real businesses), Multi-Branch (4 real branches), owner entitlements (status/flags/limits all intact), Customer Voice/feedback data, admin role resolution, the public customer feedback page, rate limiting, and cross-owner isolation across businesses, entitlements, and branches — all verified live against real data, all passed, all unchanged by this presentation-only pass.
+
+**Typecheck/Lint/Build:** all PASS — **26 routes, unchanged**.
+
+**Browser/device verification: not performed.** This phase is fundamentally visual, and that limitation is stated plainly here rather than implied away — nothing above is a claim of how this actually renders, only that the code compiles, builds, and the underlying data/security layer is provably intact.
+
+**Not yet implemented:** Phase 6 (final integration regression).
+
+## v3.3 — Phase 4: Review Generation & Customer Review Experience
+
+**Status: Phase 4 only, complete and verified. Phases 5–6 not started. No migration.**
+
+**Files changed (6, confirmed by content diff):** `generationActions.ts`, `feedback/[code]/actions.ts`, `ReviewGenerator.tsx`, `FeedbackFlow.tsx`, `reviewDraft.ts`, `replyGenerator.ts`. (`templates.ts` initially appeared in the modified-files listing but a direct diff against the checkpoint confirmed zero actual content change — a stale filesystem timestamp from an earlier test-copy operation, not a real edit.)
+
+**One architectural note, flagged rather than silently decided:** this phase's own description of the preserved customer flow ("Customer can review/edit it. Customer can Regenerate.") describes more capability than the current emoji-flow UI actually had (Copy + Continue to Google only, no edit/regenerate). Combined with this phase's explicit requirement to test customer-side regeneration, I've treated this as an intentional, approved addition and implemented a Regenerate action on the customer's ready screen — not a reversion of the emoji-flow simplification's own step removal.
+
+**Bug 1 — owner-side deterministic regeneration, fixed and empirically verified (18 real tests, not just reasoned about):** two real problems, both fixed. First, the seed depended only on an unchanging submission ID, so repeated "Regenerate" clicks with the same tone returned byte-identical text. Second, and found only by actually counting the real data: each tone's template pool has **6 real, already-written phrase variants**, but the selection logic was hardcoded to `% 3`, silently discarding half of what already existed — confirmed by direct inspection of `templates.ts`, not assumed. Fixed by adding an explicit `attempt` counter (increments only on an explicit Regenerate click, never automatically) mixed into the seed, and sizing the modulo off the real pool length instead of a hardcoded 3. Verified live: identical `attempt` twice → byte-identical (first generation stays deterministic, as required); different `attempt` → genuinely different text; factual grounding (tags, business context) and zero fabrication confirmed preserved across every regeneration tested.
+
+**Bug 2 — customer-facing hardcoded sentence, fixed and empirically verified (31 real tests):** `buildTemplateDraft()` previously had exactly one hardcoded sentence per rating tier — the literal text quoted in this phase's own bug report (`"Overall it was a great experience."` for every 5-star review, with no variation mechanism at all). Replaced with `SENTIMENT_VARIANTS`, 3–5 genuinely different natural-sounding customer-voice phrasings per rating tier, selected by the same content+attempt seed pattern as the owner-side fix — one consistent mechanism across both generators, not two. Verified live: deterministic first generation, genuinely different regenerated text, rating-appropriate sentiment never crossed between tiers, real tags/message preserved verbatim across every regeneration, zero fabricated words (names, discounts, promises) in any variant tested.
+
+**Signal selection, added to the positive flow only:** a new "What stood out?" step between the emoji tap and generation — reuses the *existing* segment-aware tag vocabulary (the same one already used for the negative-flow's "What went wrong?") rather than inventing a second category system. Multi-select, explicitly optional with a Skip affordance, matching the existing recovery step's established pattern. Selected signals now flow into both `generateDraft()`'s and `submitFeedback()`'s `tags` parameter, which were previously hardcoded to an empty array for every positive submission — confirmed via code reading this was the actual, concrete reason positive reviews had no real per-customer signal grounding before this phase.
+
+**Negative/neutral flow: completely unchanged.** No new step, no review generation involved at all — still emoji tap → optional one-tap recovery reason → thank-you, exactly as before.
+
+**One coherent engine, not two:** both fixes use the identical pattern (content-derived seed + explicit attempt counter + selecting among real, pre-written variants) implemented directly inside the two existing files — no new generation service, no `reviewGeneratorV2`, no duplicate AI call path.
+
+**Google workflow: unchanged.** Generate → (new) Regenerate → Copy → Continue to Google. No automatic posting, no claim of direct Google review creation anywhere in this change.
+
+**Tests, all real:** 18 owner-side + 31 customer-side generation tests (listed above), full cross-module regression, and the explicit security checks requested — a cross-owner submission-context read returns zero rows (unchanged `generateForSubmission` scoping, re-confirmed), and `anon` remains fully blocked from `feedback_submissions` (unchanged).
+
+**Typecheck/Lint/Build:** all PASS — **26 routes, unchanged**.
+
+**Browser/device verification: not performed.**
+
+**Not yet implemented:** Phase 5 (dashboard spacing audit), Phase 6 (final integration regression).
+
+## v3.2 — Phase 3: Real Multi-Branch System
+
+**Status: Phase 3 only, complete and verified. Phases 4–6 not started.**
+
+**Files changed (7):** new migration `0020_business_branches.sql`, `dashboard/branches/{actions.ts,page.tsx}`, `BranchManager.tsx`; modified `dashboard/more/page.tsx`, `Sidebar.tsx`, `types/database.ts`.
+
+**Migration:** one new table, `business_branches` — the first real branch entity in this project. `owner_id` included directly (not just via `business_id → businesses.owner_id`) deliberately, for RLS simplicity/speed — the same tradeoff already made for `google_business_connections` and `google_reviews`. Zero changes to `businesses`, `owner_entitlements`, `platform_settings`, or any existing RLS policy. No separate platform-level branch ceiling was introduced — none was requested, and inventing one silently would have contradicted the explicit instruction against adding a global limit without cause.
+
+**Confirmed before building anything:** Super Admin's entitlement panel already had the Multi-Branch toggle and Maximum Branches field, fully functional since Phase 1 — Phase 3G required zero changes.
+
+**"Maximum Branches" definition, implemented exactly as specified:** total *active* branches across *all* of an owner's businesses combined, not per-business — verified live with the exact scenario described (2 branches on Business A1 + 2 on Business A2 = 4 total, correctly blocking a 5th regardless of which business it would be created on).
+
+**RLS, tested directly against real Postgres:** owner-only read/insert/update via `owner_id`, admin read-only, no anon policy, no delete policy (deactivate via status only, keeping the historical record always intact by construction). Specifically tested: cross-owner read blocked, a branch correctly scoped to its own business and invisible under a sibling business, and — the one deliberately adversarial test — an owner attempting to **insert a branch row with a different owner_id than their own session** (simulating a manipulated request payload) is rejected by RLS itself, not just application logic.
+
+**Reactivation respects the limit too:** confirmed live that reactivating a branch at the owner's current limit is blocked exactly like creating a new one would be — an owner can't bypass the limit by deactivating-then-reactivating past it.
+
+**Owner UI:** new `/dashboard/branches` page, scoped to the active business via the existing resolver — list, status badges, deactivate/reactivate, Add Branch form, and the existing `UpgradeContactState`/contact configuration reused directly (no second upgrade component, no second contact configuration). Added to the sidebar and mobile More menu for discoverability, avoiding the "orphaned route" mistake found earlier in this project.
+
+**Full test matrix (A–F), all against real data:** A (multi-branch off → blocked), B (enabled, 2 created successfully), C (limit reached → blocked), D (the total-owner-across-businesses definition, exactly as above), E (deactivate → inactive, historical record intact, active count correctly decreases), F (reactivate → succeeds when under the limit, blocked when not). Cross-owner/cross-business/insert-spoofing security (G/H/I) tested directly against RLS, independent of any application code. Super Admin → owner propagation (J) relies on the same unchanged, already-tested-live mechanism from Phase 1/2.
+
+**Typecheck/Lint/Build:** all PASS — **26 routes, correctly +1** for `/dashboard/branches`.
+
+**Confirmed untouched, per the explicit scope:** review generation, the Google review/reply workflow, the customer feedback flow, recommendations, AI intelligence, QR generation/routing — none were modified; `feedback_links` remain business-level, not branch-specific, exactly as instructed.
+
+**Browser/device visual verification was not performed.**
+
+**Not yet implemented:** Phase 4 (review-generation bugs, signal selection), Phase 5 (dashboard spacing audit), Phase 6 (final integration regression).
+
+## v3.1 — Phase 2: Owner Business Access Connected to Entitlement
+
+**Status: Phase 2 only, complete and verified. Phases 3–6 not started.**
+
+**Files changed (7):** new `UpgradeContactState.tsx`, `lib/config/contact.ts`; modified `lib/business/activeBusiness.ts`, `lib/business/actions.ts`, `BusinessSwitcher.tsx`, `AddBusinessModal.tsx`, `dashboard/layout.tsx`. **No migration — explicitly, no new table or column was needed for Phase 2.**
+
+**The core connection:** a single shared function, `computeEffectiveEntitlement()`, now used by *both* `getActiveBusiness()` (so the UI shows the true limit) and `createBusiness()` (the real enforcement) — replacing `createBusiness()`'s own inline copy of this logic from Phase 1, so the computation exists in exactly one place.
+
+**A real functional gap found and fixed, not hypothetical:** the existing `BusinessSwitcher` returned a plain, non-interactive pill whenever an owner had one business — with no path to "+ Add Business" at all, even for an owner newly entitled to a second one. This is exactly Phase 2's own Test B scenario. Fixed: the dropdown now opens whenever there's more than one business *or* room to add one; the pure static pill is reserved for when there's truly nothing to offer.
+
+**Upgrade/contact flow:** confirmed, per the inspection, that no Banao WhatsApp or contact configuration exists anywhere in this codebase. Built `getBanaoContactDestination()` reading from `BANAO_WHATSAPP_NUMBER`/`BANAO_CONTACT_EMAIL` env vars — **one early draft of this function fell back to a guessed email address when the env var was unset, which was caught and corrected before it shipped**, since that's exactly the kind of fabricated contact information explicitly forbidden. It now returns `null` for an unconfigured destination, and the UI shows a plain "contact details aren't configured yet" note rather than ever guessing. **Configuration required from the Product Owner before this is fully live:** `BANAO_WHATSAPP_NUMBER` and `BANAO_CONTACT_EMAIL`.
+
+**`createBusiness()`** now returns a structured `reason` (`"subscription_blocked" | "disabled" | "limit_reached"`) alongside its error string, so the UI can reliably show the real upgrade/contact state instead of fragile string-matching on the error message.
+
+**Super Admin → owner, live and immediate:** confirmed Test J directly — changing an owner's `max_businesses` from 2 to 4 in Super Admin is reflected the instant the owner's next request runs the same query path; no caching anywhere to invalidate.
+
+**Full test matrix, all against real data:** A (multi-business off → blocked), B (the fixed single-business-with-room case → allowed, business actually created), C (limit reached → blocked), D/E/F (re-confirmed unchanged from Phase 1, same shared function), G (switching — data and selection logic confirmed unchanged), H/I (cross-owner and cookie security — unchanged, re-confirmed), J (Super Admin change takes effect immediately).
+
+**Existing pages re-verified for active-business context (item 13):** confirmed via a fresh grep sweep — zero pages regressed to the old single-business lookup pattern; Overview, Feedback, Reputation, Intelligence, QR, Settings all still resolve through `getActiveBusiness()` exactly as fixed in the Multi-Store milestone.
+
+**Typecheck/Lint/Build:** all PASS — **25 routes, unchanged**.
+
+**Browser/device visual verification was not performed.**
+
+**Not yet implemented:** Phase 3 (real branch entity), Phase 4 (review-generation bugs, signal selection), Phase 5 (dashboard spacing audit), Phase 6 (final integration regression).
+
+## v3.0 — Phase 1: Subscription / Owner Entitlement Architecture
+
+**Status: Phase 1 only (of the Master Implementation Plan's 6 phases), complete and verified. Phases 2–6 not started, per explicit instruction to stop at this gate.**
+
+**Files changed (7):** new migration `0019_owner_entitlements.sql`, `admin/entitlementActions.ts`, `OwnerEntitlementPanel.tsx`; modified: `admin/businesses/actions.ts` (email search + `ownerId` added to the detail type), `admin/businesses/[id]/page.tsx` (panel wired in), `lib/business/actions.ts` (`createBusiness()` enforcement), `types/database.ts`.
+
+**Migration:** one new table, `owner_entitlements`, keyed by `owner_id` (unique, references `auth.users`). Zero changes to `businesses`, `platform_settings`, or any existing RLS policy.
+
+**The key architectural decision, exactly as flagged for approval:** an owner with no row in this table is not an error — it means "not yet individually configured," and such an owner gets exactly today's behavior (the global `platform_settings` ceiling, nothing stricter). This is what keeps every existing owner working unchanged the instant this migration runs. The effective limit, once a row exists, is always `min(owner_entitlements.max_businesses, platform_settings.max_businesses_per_owner)` — enforced in `createBusiness()`, never exceeding the platform safety ceiling regardless of what an individual row says. Live-tested in both directions: an owner entitled to only 2 (with 4 existing businesses) is correctly blocked; an owner with no row and 1 business is correctly allowed up to the platform default of 4.
+
+**Server-side enforcement in `createBusiness()`:** checks, in order — subscription status (non-`active` blocks creation entirely, before even checking count), the combined enabled flag (`platform AND entitlement`, never more permissive than either), then the effective count limit. All three confirmed live against real data, including the "suspended blocks regardless of count" and "entitlement can restrict even when the platform allows it" cases specifically.
+
+**Super Admin:** email search added alongside the existing business-name search in the same `/admin/businesses` page (not a new search system) — an `ilike` match against `profiles.email` resolves to owner IDs, OR'd into the existing business-name query. The entitlement panel is added to the existing `/admin/businesses/[id]` detail page (not a new admin page) — view-only for non-super_admin roles, editable only for `super_admin`, enforced both in the UI and by the `owner_entitlements` RLS policy itself.
+
+**A real bug found and fixed — in this session's test environment, not the application.** While testing the new email search, an admin-gated query unexpectedly returned zero rows. Traced to the root: `is_admin()` (used by RLS policies on `businesses`, `profiles`, and others) checks `profiles.role = 'admin'` — a different mechanism from `get_admin_role()` (which reads `admin_role_assignments` and was used by this session's own regression checks throughout). When this environment's test database was rebuilt after an earlier reset, the super-admin test user's `profiles.role` was seeded as `'business_owner'` instead of `'admin'`. Fixed the test data and re-verified `is_admin()`-gated reads now genuinely return real data rather than silently empty results. This session's own regression pattern consistently used `get_admin_role()` rather than a direct `is_admin()`-gated read, so this appears not to have invalidated any previously-reported result in this conversation — but it's reported here in full rather than quietly corrected, since the honest thing to do is surface it.
+
+**Tests, all live:** the full `owner_entitlements` RLS suite (7 tests: absence-is-not-error, owner cannot write, admin can write, owner can read-but-not-write their own, cross-owner read isolation, constraint validation on both status and range, anon fully blocked), four `createBusiness()` enforcement scenarios (restrictive per-owner limit, no-row fallback, suspended status, disabled multi-business override), the email search resolving correctly end-to-end, and a full existing-module regression plus a genuine (not vacuous) cross-owner isolation re-check on both `businesses` and the new table.
+
+**Typecheck/Lint/Build:** all PASS — **25 routes, unchanged** (no new Super Admin page).
+
+**Browser/device verification: not performed, not claimed.**
+
+**Not yet implemented, per the explicit phase gate:** Phase 2 (owner-facing business dropdown connected to entitlement, upgrade/contact UI), Phase 3 (real branch entity), Phase 4 (the two confirmed review-generation bugs, lightweight signal selection), Phase 5 (dashboard spacing audit), Phase 6 (final integration regression).
+
 ## v2.9 — Multi-Store / Multi-Business Management
 
 **Status: complete and verified. 31 files changed, one new migration, zero existing migrations or RLS policies modified.**

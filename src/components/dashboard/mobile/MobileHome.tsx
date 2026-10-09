@@ -5,21 +5,16 @@ import type { RecommendedAction } from "@/lib/insights/types";
 import type { ReputationMetrics } from "@/app/dashboard/reputation/actions";
 
 /**
- * The premium mobile "Home" experience — Section 15's requested
- * hierarchy (header -> score -> sentiment -> needs attention ->
- * recommendation -> voice -> reviews -> setup -> quick actions),
- * reordered slightly because this product's actual data model makes
- * "needs attention" and "recommendation" the same underlying object
- * (topAction) shown once, not twice, which is more honest than
- * presenting one action as if it were two different insights.
- *
- * EVERY value rendered here is a prop passed down from already-computed
- * data in dashboard/page.tsx (the same pipeline /dashboard/intelligence
- * uses) — this component computes nothing itself beyond simple
- * presentation arithmetic (percentages already provided, never derived
- * from guesses). No value here is fabricated; every missing-data case
- * renders an explicit, honest empty state instead of a placeholder
- * number.
+ * Phase 5 — the mobile "Home" experience rebuilt around an explicit
+ * product narrative: LISTEN (Customer Voice) -> UNDERSTAND (AI
+ * Intelligence) -> INSIGHT (Experience Score) -> ACT (Needs Attention /
+ * AI Recommendation), per the approved information architecture. Every
+ * value here is still a prop passed down from already-computed data in
+ * dashboard/page.tsx — this component computes nothing beyond simple
+ * presentation arithmetic (percentages already provided). No value is
+ * fabricated; every missing-data case renders an explicit, honest,
+ * deliberately premium empty state instead of a placeholder number or a
+ * bare "0".
  */
 
 interface RecentMessage {
@@ -52,11 +47,40 @@ function greeting(): string {
   return "Good evening";
 }
 
-/** "Excellent" is a positive/success state (Emerald), not an AI state — the AI/Indigo accent is reserved for BD Clarity's own recommendations, shown separately below. */
-function scoreTone(score: number): { ring: string; text: string; label: string } {
-  if (score >= 70) return { ring: "stroke-success", text: "text-success-dark", label: "Excellent" };
-  if (score >= 40) return { ring: "stroke-gold", text: "text-gold", label: "Needs attention" };
-  return { ring: "stroke-danger", text: "text-danger", label: "At risk" };
+/** "Excellent" is a positive/success state (Emerald) — the AI/Indigo accent is reserved for BD Clarity's own intelligence/recommendations, kept visually distinct throughout. */
+function scoreTone(score: number): { ring: string; text: string; label: string; context: string } {
+  if (score >= 70)
+    return {
+      ring: "stroke-success",
+      text: "text-success-dark",
+      label: "Excellent",
+      context: "Customer experience is trending positively.",
+    };
+  if (score >= 40)
+    return {
+      ring: "stroke-gold",
+      text: "text-gold",
+      label: "Needs attention",
+      context: "A mixed picture — some real opportunities to improve.",
+    };
+  return {
+    ring: "stroke-danger",
+    text: "text-danger",
+    label: "At risk",
+    context: "Recent feedback points to real issues worth addressing.",
+  };
+}
+
+function SectionLabel({ eyebrow, title, dotClass }: { eyebrow: string; title: string; dotClass: string }) {
+  return (
+    <div>
+      <p className="flex items-center gap-1.5 font-mono text-[10px] font-medium uppercase tracking-wider text-slate">
+        <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} aria-hidden="true" />
+        {eyebrow}
+      </p>
+      <p className="mt-0.5 font-display text-base font-semibold text-ink">{title}</p>
+    </div>
+  );
 }
 
 function SectionCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
@@ -87,15 +111,21 @@ export function MobileHome({
 }: MobileHomeProps) {
   return (
     <div className="flex flex-col gap-4 pb-6 md:hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="font-display text-xl font-semibold tracking-tight text-ink">
-            {greeting()}
-            {ownerName ? `, ${ownerName.split(" ")[0]}` : ""} 👋
+      {/* Product-level header — the greeting plus an explicit "this is a
+          Customer Intelligence product" framing line, not just "Here's
+          what matters today." */}
+      <div>
+        <p className="font-display text-xl font-semibold tracking-tight text-ink">
+          {greeting()}
+          {ownerName ? `, ${ownerName.split(" ")[0]}` : ""} 👋
+        </p>
+        <p className="mt-0.5 text-sm text-ink-soft">Here&rsquo;s what your customers are telling you today.</p>
+        {businessName && (
+          <p className="mt-2 flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-slate">
+            <span className="h-1.5 w-1.5 rounded-full bg-verified" aria-hidden="true" />
+            Customer Intelligence · {businessName}
           </p>
-          <p className="mt-0.5 text-sm text-ink-soft">Here&rsquo;s what matters today.</p>
-        </div>
+        )}
       </div>
 
       {!setupComplete && (
@@ -118,33 +148,61 @@ export function MobileHome({
       )}
 
       {!hasEnoughData ? (
-        <SectionCard className="text-center">
-          <p className="font-display text-base font-semibold text-ink">
-            Your Experience Score is waiting.
+        /* Premium zero/early-data state — "the system is ready," never a
+           bare "0" dashboard. Previews the real product structure
+           (Listen / Understand / Act) so the value is legible even
+           before any data exists, per the explicit requirement. */
+        <SectionCard className="relative overflow-hidden text-center">
+          <div
+            className="pointer-events-none absolute inset-0 opacity-[0.04]"
+            style={{ background: "var(--gradient-brand)" }}
+            aria-hidden="true"
+          />
+          <p className="relative font-display text-lg font-semibold text-ink">
+            Your Customer Intelligence is ready.
           </p>
-          <p className="mt-1.5 text-sm text-slate">
+          <p className="relative mt-1.5 text-sm text-slate">
             {currentFeedbackCount > 0
-              ? `${currentFeedbackCount} of ${neededCount} responses collected — collect a few more to unlock your score.`
-              : "Collect your first customer responses to unlock your score."}
+              ? `${currentFeedbackCount} of ${neededCount} responses collected — your dashboard becomes smarter as more customers respond.`
+              : "Your dashboard will become smarter as customers start responding."}
           </p>
+          <div className="relative mt-5 grid grid-cols-3 gap-2 text-left">
+            <div className="rounded-[var(--radius-sm)] border border-voice/20 bg-voice-tint p-2.5">
+              <p className="font-mono text-[9px] uppercase tracking-wider text-voice-dark">Listen</p>
+              <p className="mt-1 text-xs text-ink">Customer Voice</p>
+            </div>
+            <div className="rounded-[var(--radius-sm)] border border-verified/20 bg-verified-tint p-2.5">
+              <p className="font-mono text-[9px] uppercase tracking-wider text-verified-dark">Understand</p>
+              <p className="mt-1 text-xs text-ink">AI Intelligence</p>
+            </div>
+            <div className="rounded-[var(--radius-sm)] border border-gold/20 bg-gold-tint p-2.5">
+              <p className="font-mono text-[9px] uppercase tracking-wider text-gold">Act</p>
+              <p className="mt-1 text-xs text-ink">Recommendations</p>
+            </div>
+          </div>
           <Link
             href="/dashboard/qr-feedback"
-            className="mt-4 inline-flex items-center justify-center rounded-[var(--radius-sm)] bg-verified px-5 py-2.5 text-sm font-medium text-white shadow-sm"
+            className="relative mt-5 inline-flex items-center justify-center rounded-[var(--radius-sm)] bg-verified px-5 py-2.5 text-sm font-medium text-white shadow-sm"
           >
             {hasFeedbackLink ? "View QR Code" : "Get QR Code"}
           </Link>
         </SectionCard>
       ) : (
         <>
-          {/* Experience Score hero */}
+          {/* INSIGHT — Experience Score, the visually dominant element */}
           {score && score.score !== null && (
-            <SectionCard>
-              <p className="font-mono text-[10px] uppercase tracking-wider text-slate">
+            <SectionCard className="relative overflow-hidden">
+              <div
+                className="pointer-events-none absolute inset-0 opacity-[0.03]"
+                style={{ background: "var(--gradient-brand)" }}
+                aria-hidden="true"
+              />
+              <p className="relative font-mono text-[10px] uppercase tracking-wider text-slate">
                 Experience Score
               </p>
-              <div className="mt-3 flex items-center gap-4">
-                <div className="relative h-20 w-20 shrink-0">
-                  <svg viewBox="0 0 80 80" className="h-20 w-20 -rotate-90">
+              <div className="relative mt-3 flex items-center gap-5">
+                <div className="relative h-24 w-24 shrink-0">
+                  <svg viewBox="0 0 80 80" className="h-24 w-24 -rotate-90">
                     <circle cx="40" cy="40" r="34" strokeWidth="7" className="stroke-ink/[0.07]" fill="none" />
                     <circle
                       cx="40"
@@ -157,26 +215,52 @@ export function MobileHome({
                       strokeDasharray={`${(score.score / 100) * 213.6} 213.6`}
                     />
                   </svg>
-                  <span className="absolute inset-0 flex items-center justify-center font-display text-lg font-semibold text-ink">
-                    {score.score}
+                  <span className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="font-display text-2xl font-semibold text-ink">{score.score}</span>
+                    <span className="text-[9px] text-slate">/ 100</span>
                   </span>
                 </div>
                 <div>
                   <p className={`text-sm font-semibold ${scoreTone(score.score).text}`}>
                     ● {scoreTone(score.score).label}
                   </p>
-                  <p className="mt-1 text-xs text-slate">Out of 100, from real customer feedback.</p>
+                  <p className="mt-1 text-xs leading-relaxed text-ink-soft">{scoreTone(score.score).context}</p>
                 </div>
               </div>
             </SectionCard>
           )}
 
-          {/* Sentiment distribution — real percentages from analytics.distribution */}
+          {/* LISTEN — Customer Voice, framed as a core product capability */}
+          {recentMessages.length > 0 && (
+            <SectionCard>
+              <div className="flex items-center justify-between">
+                <SectionLabel eyebrow="Listen" title="Customer Voice" dotClass="bg-voice" />
+                <Link href="/dashboard/feedback" className="text-xs font-medium text-voice-dark">
+                  View all →
+                </Link>
+              </div>
+              <p className="mt-2 text-xs text-slate">Here&rsquo;s what your customers are talking about.</p>
+              <div className="mt-3 flex flex-col gap-2.5">
+                {recentMessages.slice(0, 3).map((m, i) => (
+                  <div key={i} className="border-l-2 border-voice/30 pl-3">
+                    <p className="line-clamp-2 text-sm text-ink">&ldquo;{m.message}&rdquo;</p>
+                    <p className="mt-0.5 text-[10px] text-slate">
+                      {m.rating >= 4 ? "😊" : m.rating === 3 ? "😐" : "😕"} ·{" "}
+                      {new Date(m.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+          )}
+
+          {/* UNDERSTAND — AI Intelligence: the same real sentiment data,
+              explicitly framed as BD Clarity's own understanding of the
+              Customer Voice above, not a second raw data table. */}
           {analytics && analytics.total > 0 && (
             <SectionCard>
-              <p className="font-mono text-[10px] uppercase tracking-wider text-slate">
-                Customer Sentiment
-              </p>
+              <SectionLabel eyebrow="Understand" title="AI Customer Intelligence" dotClass="bg-verified" />
+              <p className="mt-2 text-xs text-slate">What your customers&rsquo; feedback actually means.</p>
               {(() => {
                 const byRating = new Map(analytics.distribution.map((d) => [d.rating, d]));
                 const positive = (byRating.get(4)?.pct ?? 0) + (byRating.get(5)?.pct ?? 0);
@@ -200,24 +284,27 @@ export function MobileHome({
             </SectionCard>
           )}
 
-          {/* Needs Attention / AI Recommendation — same underlying object (topAction), shown once */}
+          {/* ACT — Needs Attention / AI Recommendation. Same underlying
+              object (topAction), per the earlier architectural decision
+              (the data model has exactly one action, not two) — now
+              restructured with explicit "why this matters / recommended
+              action / evidence" framing instead of a flat paragraph. */}
           <SectionCard>
-            <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-slate">
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${topAction ? "bg-gold" : "bg-success"}`}
-                aria-hidden="true"
-              />
-              {topAction ? "Needs Attention" : "All Clear"}
-            </p>
+            <SectionLabel
+              eyebrow="Act"
+              title={topAction ? "Needs Attention" : "All Clear"}
+              dotClass={topAction ? "bg-gold" : "bg-success"}
+            />
             {topAction ? (
               <>
                 <p className="mt-2 text-sm font-semibold text-ink">⚠️ {topAction.title}</p>
                 <p className="mt-1 text-xs text-slate">
-                  {topAction.evidence.count} of {topAction.evidence.outOf} {topAction.evidence.label}
+                  Why this matters — {topAction.evidence.count} of {topAction.evidence.outOf}{" "}
+                  {topAction.evidence.label}
                 </p>
                 {topAction.recommendation && (
                   <div className="mt-3 rounded-[var(--radius-sm)] border border-verified/20 bg-verified-tint p-3">
-                    <p className="text-xs font-medium text-verified-dark">✨ AI Recommendation</p>
+                    <p className="text-xs font-medium text-verified-dark">✨ Recommended action</p>
                     <p className="mt-1 text-sm text-ink">{topAction.recommendation}</p>
                   </div>
                 )}
@@ -229,44 +316,18 @@ export function MobileHome({
                 </Link>
               </>
             ) : (
-              <p className="mt-2 text-sm text-ink">✨ No major customer issues detected.</p>
+              <p className="mt-2 text-sm text-ink">✨ Nothing urgent right now.</p>
             )}
           </SectionCard>
-
-          {/* Customer Voice excerpts — real recent messages only */}
-          {recentMessages.length > 0 && (
-            <SectionCard>
-              <div className="flex items-center justify-between">
-                <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-slate">
-                  <span className="h-1.5 w-1.5 rounded-full bg-voice" aria-hidden="true" />
-                  Customer Voice
-                </p>
-                <Link href="/dashboard/feedback" className="text-xs font-medium text-voice-dark">
-                  View all →
-                </Link>
-              </div>
-              <div className="mt-3 flex flex-col gap-2.5">
-                {recentMessages.slice(0, 3).map((m, i) => (
-                  <div key={i} className="border-l-2 border-voice/30 pl-3">
-                    <p className="line-clamp-2 text-sm text-ink">&ldquo;{m.message}&rdquo;</p>
-                    <p className="mt-0.5 text-[10px] text-slate">
-                      {m.rating >= 4 ? "😊" : m.rating === 3 ? "😐" : "😕"} ·{" "}
-                      {new Date(m.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </SectionCard>
-          )}
         </>
       )}
 
       {/* Reviews — independent of the feedback-volume gate above, since it's a different data source */}
       <SectionCard>
-        <p className="font-mono text-[10px] uppercase tracking-wider text-slate">Google Reviews</p>
+        <SectionLabel eyebrow="Reviews" title="Google Reviews" dotClass="bg-gold" />
         {reputation ? (
           <>
-            <div className="mt-2 flex items-baseline gap-2">
+            <div className="mt-3 flex items-baseline gap-2">
               <span className="font-display text-xl font-semibold text-ink">
                 ⭐ {reputation.averageRating ?? "—"}
               </span>
@@ -326,10 +387,6 @@ export function MobileHome({
           ))}
         </div>
       </div>
-
-      {businessName && (
-        <p className="mt-1 text-center text-xs text-slate">{businessName}</p>
-      )}
     </div>
   );
 }

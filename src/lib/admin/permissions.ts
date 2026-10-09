@@ -22,12 +22,11 @@ import type { AdminRole } from "@/types/database";
  * substitute for it.
  */
 
-export const ADMIN_ROLE_LABELS: Record<AdminRole, string> = {
-  super_admin: "Super Admin",
-  support_admin: "Support Admin",
-  operations_admin: "Operations Admin",
-  read_only_analyst: "Read-only Analyst",
-};
+// Re-exported from roleLabels.ts (a plain-data file with no server-only
+// dependency) — moved there so client components can use the same
+// labels without pulling in this server-only module. Every existing
+// import of ADMIN_ROLE_LABELS from this file keeps working unchanged.
+export { ADMIN_ROLE_LABELS } from "@/lib/admin/roleLabels";
 
 export type AdminCapability =
   | "view_dashboard"
@@ -36,10 +35,7 @@ export type AdminCapability =
   | "support_access_sessions"
   | "manage_support_notes"
   | "manage_admin_roles"
-  | "manage_platform_settings"
-  | "edit_business_details"
-  | "delete_business"
-  | "view_all_users";
+  | "manage_platform_settings";
 
 /**
  * The approved permission matrix. Kept as one explicit table (not
@@ -55,9 +51,6 @@ const PERMISSION_MATRIX: Record<AdminRole, Set<AdminCapability>> = {
     "manage_support_notes",
     "manage_admin_roles",
     "manage_platform_settings",
-    "edit_business_details",
-    "delete_business",
-    "view_all_users",
   ]),
   operations_admin: new Set([
     "view_dashboard",
@@ -65,8 +58,6 @@ const PERMISSION_MATRIX: Record<AdminRole, Set<AdminCapability>> = {
     "manage_branches",
     "support_access_sessions",
     "manage_support_notes",
-    "edit_business_details",
-    "view_all_users",
   ]),
   support_admin: new Set(["view_dashboard", "support_access_sessions", "manage_support_notes"]),
   read_only_analyst: new Set(["view_dashboard"]),
@@ -76,6 +67,11 @@ export function hasCapability(role: AdminRole | null, capability: AdminCapabilit
   if (!role) return false;
   return PERMISSION_MATRIX[role].has(capability);
 }
+
+/** The full capability list, derived from the matrix itself rather than hand-maintained separately — used by Admin Management to show an admin's effective capabilities without a second, independent permission calculation. */
+export const ALL_CAPABILITIES: AdminCapability[] = Array.from(
+  new Set(Object.values(PERMISSION_MATRIX).flatMap((set) => Array.from(set)))
+);
 
 export interface CurrentAdmin {
   userId: string;

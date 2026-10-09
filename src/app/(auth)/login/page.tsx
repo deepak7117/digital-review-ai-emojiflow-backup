@@ -8,6 +8,7 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { Field, Input } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
+import { checkLoginAllowed } from "@/app/(auth)/login/rateLimitActions";
 
 function LoginForm() {
   const router = useRouter();
@@ -32,6 +33,14 @@ function LoginForm() {
     if (!validate()) return;
 
     setLoading(true);
+
+    const { allowed } = await checkLoginAllowed(email);
+    if (!allowed) {
+      setLoading(false);
+      setErrors({ form: "Too many attempts. Please wait a few minutes and try again." });
+      return;
+    }
+
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
 

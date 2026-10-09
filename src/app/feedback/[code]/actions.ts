@@ -105,6 +105,8 @@ export async function generateDraft(input: {
   message: unknown;
   tone?: unknown;
   contextAnswers?: unknown;
+  /** Regeneration counter — only increments on the customer's own explicit "Regenerate" action. See DraftInput's doc comment in reviewDraft.ts. */
+  attempt?: unknown;
 }): Promise<{ draft: string; source: "template" | "ai" } | { error: string }> {
   const rating = clampRating(input.rating);
   if (rating === null) return { error: "Please choose a star rating first." };
@@ -134,7 +136,12 @@ export async function generateDraft(input: {
     answer: a.answer,
   }));
 
-  const result = await generateReviewDraft({ rating, tags, message, tone, contextAnswers });
+  const attempt =
+    typeof input.attempt === "number" && Number.isFinite(input.attempt) && input.attempt >= 0
+      ? input.attempt
+      : 0;
+
+  const result = await generateReviewDraft({ rating, tags, message, tone, contextAnswers, attempt });
   return result;
 }
 

@@ -57,7 +57,8 @@ export interface GenerationResult {
  */
 export async function generateForSubmission(
   submissionId: unknown,
-  tone: unknown
+  tone: unknown,
+  attempt: unknown = 0
 ): Promise<{ data: GenerationResult } | { error: string }> {
   if (typeof submissionId !== "string" || !submissionId) return { error: "Invalid feedback." };
 
@@ -95,7 +96,12 @@ export async function generateForSubmission(
     contextAnswers: [], // see doc comment above — not collected live yet
   };
 
-  const replies = generateGoogleReplies(context, { tone: resolvedTone, seed: hashSubmissionId(submission.id) });
+  const resolvedAttempt = typeof attempt === "number" && Number.isFinite(attempt) && attempt >= 0 ? attempt : 0;
+  const replies = generateGoogleReplies(context, {
+    tone: resolvedTone,
+    seed: hashSubmissionId(submission.id),
+    attempt: resolvedAttempt,
+  });
   const comments = generateAllCommentStyles(context);
 
   return { data: { replies, comments } };

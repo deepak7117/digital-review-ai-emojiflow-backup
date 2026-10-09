@@ -58,6 +58,15 @@ export interface DraftInput {
   tone?: "neutral" | "detailed" | "brief";
   /** Optional — real answers to the business's context questions, if any were collected. See module doc comment above. */
   contextAnswers?: DraftContextAnswer[];
+  /**
+   * Explicit regeneration counter (0 = first generation), mirroring the
+   * same mechanism added to the owner-side reply generator
+   * (src/lib/reviewEngine/replyGenerator.ts) for the same confirmed
+   * Phase 4 bug. Only increments on an explicit customer "Regenerate"
+   * action — never automatically. Selects a different real sentiment
+   * sentence from SENTIMENT_VARIANTS below; never invents new content.
+   */
+  attempt?: number;
 }
 
 export interface DraftResult {
@@ -70,17 +79,74 @@ export function isAiConfigured(): boolean {
 }
 
 /** Builds a draft purely by composing the customer's own inputs. No model, no invention. */
-function buildTemplateDraft({ rating, tags, message, tone = "neutral", contextAnswers = [] }: DraftInput): string {
-  const sentiment =
-    rating >= 5
-      ? "Overall it was a great experience."
-      : rating === 4
-        ? "Overall it was a good experience."
-        : rating === 3
-          ? "Overall it was an okay experience."
-          : rating === 2
-            ? "Overall it wasn't a great experience."
-            : "Overall it was a disappointing experience.";
+/**
+ * Customer-voice sentiment sentences — several genuinely different,
+ * natural phrasings per rating tier, not just one hardcoded line per
+ * rating. This is the direct fix for the confirmed Phase 4 bug: every
+ * customer at a given rating, with no other signal collected, used to
+ * receive the exact same single sentence (e.g. "Overall it was a great
+ * experience." for every 5-star review). Selecting among these by a
+ * content+attempt seed is the same pattern already used in the
+ * owner-side reply generator — one consistent mechanism, not a second
+ * engine.
+ */
+const SENTIMENT_VARIANTS: Record<number, string[]> = {
+  5: [
+    "Overall it was a great experience.",
+    "I really enjoyed my visit.",
+    "This was a wonderful experience overall.",
+    "I'd happily come back again.",
+    "Everything about this visit was excellent.",
+  ],
+  4: [
+    "Overall it was a good experience.",
+    "I enjoyed my visit here.",
+    "This was a solid, positive experience.",
+    "I'd come back again.",
+  ],
+  3: [
+    "Overall it was an okay experience.",
+    "It was a fairly average visit.",
+    "A decent, middle-of-the-road experience.",
+  ],
+  2: [
+    "Overall it wasn't a great experience.",
+    "This visit left something to be desired.",
+    "It wasn't quite what I expected.",
+  ],
+  1: [
+    "Overall it was a disappointing experience.",
+    "This visit really didn't meet my expectations.",
+    "I was let down by this experience.",
+  ],
+};
+
+function pickSentiment(rating: number, seed: number): string {
+  const variants = SENTIMENT_VARIANTS[rating] ?? SENTIMENT_VARIANTS[3];
+  const index = ((seed % variants.length) + variants.length) % variants.length;
+  return variants[index];
+}
+
+function hashDraftContent(rating: number, tags: string[], message: string): number {
+  let hash = 2166136261;
+  const str = `${rating}|${tags.join(",")}|${message}`;
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return Math.abs(hash);
+}
+
+function buildTemplateDraft({
+  rating,
+  tags,
+  message,
+  tone = "neutral",
+  contextAnswers = [],
+  attempt = 0,
+}: DraftInput): string {
+  const seed = hashDraftContent(rating, tags, message) + attempt * 104729;
+  const sentiment = pickSentiment(rating, seed);
 
   const answeredContext = contextAnswers.filter((a) => a.answer.trim());
 
